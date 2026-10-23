@@ -58,7 +58,7 @@ async def analyze_road_imagery_with_gemini(
         client = genai.Client(**client_kwargs)
         image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
 
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model=settings.GEMINI_MODEL,
             contents=[image_part, GEMINI_ANALYSIS_PROMPT],
             config=types.GenerateContentConfig(
@@ -72,8 +72,10 @@ async def analyze_road_imagery_with_gemini(
             analysis = VisionRoadAnalysis.model_validate_json(response.text)
             return analysis, f"gemini_{settings.GEMINI_MODEL}"
         else:
-            raise ValueError("Gemini API returned an empty response body.")
+            logger.warning("Gemini API returned an empty response body for road '%s'.", road_name)
+            return None, "empty_gemini_response"
 
     except Exception as exc:
-        logger.error("Gemini Vision API invocation failed for road '%s': %s", road_name, exc)
-        raise RuntimeError(f"Gemini Vision API online inspection error: {exc}")
+        logger.warning("Gemini Vision API invocation failed for road '%s': %s", road_name, exc)
+        return None, f"gemini_error: {str(exc)[:100]}"
+

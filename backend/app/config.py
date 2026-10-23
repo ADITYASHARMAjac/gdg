@@ -1,6 +1,5 @@
-"""Application configuration with Pydantic BaseSettings and credential safety."""
-
 import os
+from pathlib import Path
 from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -43,7 +42,7 @@ class Settings(BaseSettings):
         description="Gemini API Key for multimodal road inspection."
     )
     GEMINI_MODEL: str = Field(
-        default="gemini-2.5-flash",
+        default="gemini-3.5-flash",
         description="Vision-capable Gemini model name."
     )
     GEMINI_API_URL: Optional[str] = Field(
@@ -77,8 +76,8 @@ class Settings(BaseSettings):
 
     # Routing & Vision Parameters
     SAMPLE_INTERVAL_METERS: float = Field(default=100.0, ge=25.0, le=500.0)
-    MAX_IMAGE_BUDGET_PER_ROUTE: int = Field(default=10, ge=1, le=30)
-    REQUEST_TIMEOUT_SECONDS: float = Field(default=15.0, ge=3.0, le=60.0)
+    MAX_IMAGE_BUDGET_PER_ROUTE: int = Field(default=4, ge=1, le=30)
+    REQUEST_TIMEOUT_SECONDS: float = Field(default=25.0, ge=3.0, le=60.0)
     MAX_RETRIES: int = Field(default=3, ge=1, le=5)
 
     # Operational Mode: Strictly Online Mode
@@ -86,7 +85,11 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = Field(default="development")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[
+            str(Path(__file__).resolve().parents[2] / ".env"),
+            str(Path(__file__).resolve().parent.parent / ".env"),
+            ".env",
+        ],
         env_file_encoding="utf-8",
         extra="ignore"
     )

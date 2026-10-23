@@ -25,58 +25,112 @@ from backend.app.engine.registry import RouteAllocationRegistry
 logger = logging.getLogger(__name__)
 
 
+import asyncio
+
+async def _inspect_single_segment(
+    seg: RoadSegmentData,
+    vehicle_type: VehicleType,
+    semaphore: asyncio.Semaphore,
+) -> tuple[float, bool]:
+    async with semaphore:
+        image_bytes = None
+        if settings.GOOGLE_STREET_VIEW_API_KEY:
+            try:
+                image_bytes = await asyncio.wait_for(
+                    fetch_street_view_image_bytes(
+                        seg.start_coord,
+                        heading=seg.street_view_heading,
+                    ),
+                    timeout=8.0,
+                )
+            except Exception as e:
+                logger.debug("Street view fetch error for '%s': %s", seg.name, e)
+                image_bytes = None
+
+        has_image = bool(image_bytes)
+        seg.has_imagery = has_image
+
+        vision = None
+        if image_bytes and settings.GEMINI_API_KEY:
+            try:
+                vision, _ = await asyncio.wait_for(
+                    analyze_road_imagery_with_gemini(
+                        image_bytes=image_bytes,
+                        road_name=seg.name,
+                        functional_class=seg.functional_class,
+                    ),
+                    timeout=18.0,
+                )
+            except Exception as e:
+                logger.debug("Gemini vision analysis error for '%s': %s", seg.name, e)
+                vision = None
+
+        seg.vision_analysis = vision
+
+        suitability = calculate_road_suitability(
+            analysis=vision,
+            functional_class=seg.functional_class,
+            vehicle_type=vehicle_type,
+            known_restrictions=seg.restrictions,
+        )
+        seg.suitability = suitability
+        return suitability.suitability_score, has_image
+
+
 async def analyze_candidate_routes_pipeline(
     candidates: list[CandidateRoute],
     vehicle_type: VehicleType = VehicleType.PASSENGER_CAR,
     sample_interval_meters: float = 100.0,
 ) -> tuple[list[CandidateRoute], int, float, str]:
-    """Inspects segments across live candidate routes via Street View and Gemini Vision."""
+    """Inspects segments across live candidate routes concurrently via Street View and Gemini Vision."""
     total_segments = 0
     imagery_successes = 0
     provenance = f"gemini_{settings.GEMINI_MODEL}"
 
+    semaphore = asyncio.Semaphore(5)
+    tasks = []
+    route_segment_counts = []
+
     for route in candidates:
+        route_tasks = []
+        for seg in route.segments:
+            route_tasks.append(_inspect_single_segment(seg, vehicle_type, semaphore))
+        route_segment_counts.append(len(route_tasks))
+        tasks.extend(route_tasks)
+
+    if tasks:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    else:
+        results = []
+
+    result_idx = 0
+    for r_idx, route in enumerate(candidates):
+        count = route_segment_counts[r_idx]
         segment_suitabilities = []
 
-        for seg in route.segments:
+        for seg_i in range(count):
+            res = results[result_idx]
+            result_idx += 1
             total_segments += 1
-            image_bytes = None
 
-            # Fetch real Street View imagery if key is available
-            if settings.GOOGLE_STREET_VIEW_API_KEY:
-                image_bytes = await fetch_street_view_image_bytes(
-                    seg.start_coord,
-                    heading=seg.street_view_heading,
-                )
-                if image_bytes:
+            if isinstance(res, tuple):
+                score, has_img = res
+                segment_suitabilities.append(score)
+                if has_img:
                     imagery_successes += 1
-                    seg.has_imagery = True
-                else:
-                    seg.has_imagery = False
             else:
-                seg.has_imagery = False
-
-            # Live Gemini multimodal vision analysis
-            vision = None
-            if image_bytes and settings.GEMINI_API_KEY:
-                vision, _ = await analyze_road_imagery_with_gemini(
-                    image_bytes=image_bytes,
-                    road_name=seg.name,
+                # In case of unhandled exception
+                logger.warning("Segment analysis raised unhandled exception: %s", res)
+                seg = route.segments[seg_i]
+                suitability = calculate_road_suitability(
+                    analysis=None,
                     functional_class=seg.functional_class,
+                    vehicle_type=vehicle_type,
+                    known_restrictions=seg.restrictions,
                 )
-            seg.vision_analysis = vision
+                seg.suitability = suitability
+                segment_suitabilities.append(suitability.suitability_score)
 
-            # Compute road suitability score from visual findings
-            suitability = calculate_road_suitability(
-                analysis=vision,
-                functional_class=seg.functional_class,
-                vehicle_type=vehicle_type,
-                known_restrictions=seg.restrictions,
-            )
-            seg.suitability = suitability
-            segment_suitabilities.append(suitability.suitability_score)
-
-        # Update candidate route aggregate suitability & confidence
         if segment_suitabilities:
             route.suitability_score = round(sum(segment_suitabilities) / len(segment_suitabilities), 1)
             route.confidence = round(
@@ -86,6 +140,7 @@ async def analyze_candidate_routes_pipeline(
 
     coverage_ratio = imagery_successes / max(1, total_segments)
     return candidates, total_segments, round(coverage_ratio, 2), provenance
+
 
 
 async def run_flowsplit_pipeline(

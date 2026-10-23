@@ -3,13 +3,19 @@
 Capacity-Aware, AI-Powered Geospatial Routing Backend.
 """
 
+import sys
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
+
+# Ensure workspace root is always on sys.path
+root_dir = str(Path(__file__).resolve().parents[2])
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
 
 from backend.app.config import settings
 from backend.app.db.session import init_db
