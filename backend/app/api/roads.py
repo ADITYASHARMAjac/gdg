@@ -1,8 +1,11 @@
-"""FastAPI endpoints for individual road segment inspection and retrieval."""
+"""FastAPI endpoints for individual road segment inspection and retrieval.
+
+Operates strictly in online mode using Gemini Vision and Street View APIs.
+Persistence is SQLite-free (in-memory or optional PostgreSQL).
+"""
 
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.app.config import settings
@@ -20,12 +23,21 @@ router = APIRouter(prefix="/api/roads", tags=["Roads"])
 @router.post("/analyze", response_model=RoadAnalysisResponse)
 async def analyze_road_segment(
     req: RoadAnalysisRequest,
-    db: AsyncSession = Depends(get_db),
+    db=Depends(get_db),
 ):
-    """Inspects a specific geographic road point, assessing suitability via vision analysis."""
+    """Inspects a specific geographic road point online via Street View and Gemini Vision."""
+    if not settings.GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Gemini API key (GEMINI_API_KEY) is not configured in .env. "
+                "FlowSplit operates strictly in online mode and requires active API credentials."
+            ),
+        )
+
     coord = Coordinate(lat=req.lat, lng=req.lng)
-    
-    # Pre-flight check & image fetch
+
+    # Street View image fetch
     image_bytes = None
     has_sv = False
     if settings.GOOGLE_STREET_VIEW_API_KEY:
@@ -34,12 +46,14 @@ async def analyze_road_segment(
         if has_sv:
             image_bytes = await fetch_street_view_image_bytes(coord, heading=req.heading)
 
-    # Gemini or deterministic offline analysis
-    vision, source = await analyze_road_imagery_with_gemini(
-        image_bytes=image_bytes,
-        road_name=req.road_name,
-        force_offline=not settings.GEMINI_API_KEY,
-    )
+    # Online Gemini Vision Analysis
+    try:
+        vision, source = await analyze_road_imagery_with_gemini(
+            image_bytes=image_bytes,
+            road_name=req.road_name,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gemini Vision analysis error: {str(exc)}")
 
     # Deterministic suitability score
     suitability = calculate_road_suitability(
@@ -58,7 +72,7 @@ async def analyze_road_segment(
         end_lng=req.lng,
         suitability_score=suitability.suitability_score,
         confidence=suitability.confidence,
-        feature_analysis=vision.model_dump(),
+        feature_analysis=vision.model_dump() if vision else None,
         penalties=[p.model_dump() for p in suitability.penalties_applied],
         source=source,
     )
@@ -70,7 +84,7 @@ async def analyze_road_segment(
         id=obs_id,
         road_segment_id=road_id,
         observation_type="vision_analysis",
-        measured_or_estimated_value=vision.model_dump(),
+        measured_or_estimated_value=vision.model_dump() if vision else {},
         source=source,
         confidence=suitability.confidence,
     )
@@ -92,7 +106,7 @@ async def analyze_road_segment(
 @router.get("/{road_id}")
 async def get_road_segment(
     road_id: str,
-    db: AsyncSession = Depends(get_db),
+    db=Depends(get_db),
 ):
     """Retrieves an existing road segment analysis and observations by ID."""
     query = select(DBRoadSegment).where(DBRoadSegment.id == road_id)
@@ -109,7 +123,7 @@ async def get_road_segment(
         "feature_analysis": seg.feature_analysis,
         "penalties": seg.penalties,
         "nominal_capacity_vph": seg.nominal_capacity_vph,
-        "analysis_timestamp": seg.analysis_timestamp.isoformat() if seg.analysis_timestamp else None,
+        "analysis_timestamp": seg.analysis_timestamp.isoformat() if hasattr(seg.analysis_timestamp, "isoformat") else str(seg.analysis_timestamp),
         "source": seg.source,
         "status": seg.status,
     }

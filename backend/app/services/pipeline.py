@@ -1,7 +1,8 @@
 """End-to-end routing pipeline orchestrator.
 
-Integrates route generation, street imagery sampling, vision analysis,
-deterministic road suitability scoring, and capacity-aware route selection.
+Integrates real-time Google Routes API generation, Street View imagery sampling,
+Gemini multimodal road inspection, deterministic suitability scoring, and capacity-aware selection.
+Operates strictly in live online mode.
 """
 
 import logging
@@ -28,22 +29,21 @@ async def analyze_candidate_routes_pipeline(
     candidates: list[CandidateRoute],
     vehicle_type: VehicleType = VehicleType.PASSENGER_CAR,
     sample_interval_meters: float = 100.0,
-    demo_mode: bool = False,
 ) -> tuple[list[CandidateRoute], int, float, str]:
-    """Inspects segments across candidate routes, runs vision analysis and updates suitability scores."""
+    """Inspects segments across live candidate routes via Street View and Gemini Vision."""
     total_segments = 0
     imagery_successes = 0
-    provenance = "gemini_vision" if not demo_mode and settings.GEMINI_API_KEY else "deterministic_offline_demo"
+    provenance = f"gemini_{settings.GEMINI_MODEL}"
 
-    for r_idx, route in enumerate(candidates):
+    for route in candidates:
         segment_suitabilities = []
 
-        for s_idx, seg in enumerate(route.segments):
+        for seg in route.segments:
             total_segments += 1
             image_bytes = None
 
-            # In live mode with API keys, fetch street view image
-            if not demo_mode and settings.GOOGLE_STREET_VIEW_API_KEY:
+            # Fetch real Street View imagery if key is available
+            if settings.GOOGLE_STREET_VIEW_API_KEY:
                 image_bytes = await fetch_street_view_image_bytes(
                     seg.start_coord,
                     heading=seg.street_view_heading,
@@ -54,19 +54,19 @@ async def analyze_candidate_routes_pipeline(
                 else:
                     seg.has_imagery = False
             else:
-                seg.has_imagery = True
-                imagery_successes += 1
+                seg.has_imagery = False
 
-            # Vision analysis (Gemini or deterministic model)
-            vision, prov = await analyze_road_imagery_with_gemini(
-                image_bytes=image_bytes,
-                road_name=seg.name,
-                functional_class=seg.functional_class,
-                force_offline=demo_mode or not settings.GEMINI_API_KEY,
-            )
+            # Live Gemini multimodal vision analysis
+            vision = None
+            if image_bytes and settings.GEMINI_API_KEY:
+                vision, _ = await analyze_road_imagery_with_gemini(
+                    image_bytes=image_bytes,
+                    road_name=seg.name,
+                    functional_class=seg.functional_class,
+                )
             seg.vision_analysis = vision
 
-            # Compute deterministic suitability score
+            # Compute road suitability score from visual findings
             suitability = calculate_road_suitability(
                 analysis=vision,
                 functional_class=seg.functional_class,
@@ -95,12 +95,11 @@ async def run_flowsplit_pipeline(
     current_route_id: Optional[str] = None,
     weights: Optional[CostWeightsConfig] = None,
     registry: Optional[RouteAllocationRegistry] = None,
-    force_demo: bool = False,
 ) -> tuple[SelectedRouteDecision, list[CandidateRoute], list[str]]:
-    """Runs full pipeline: generates candidate routes, analyzes roads, and selects optimal route."""
-    # 1. Candidate routes
+    """Runs full online pipeline: Google Routes API -> Street View -> Gemini Vision -> FlowSplit selection."""
+    # 1. Fetch live candidate routes from Google Routes API
     candidates, provider, warnings = await get_candidate_routes(
-        origin, destination, vehicle_type, force_demo=force_demo
+        origin, destination, vehicle_type
     )
 
     # 2. Road visual inspection and suitability scoring
@@ -108,7 +107,6 @@ async def run_flowsplit_pipeline(
         candidates,
         vehicle_type=vehicle_type,
         sample_interval_meters=settings.SAMPLE_INTERVAL_METERS,
-        demo_mode=force_demo or (provider == "deterministic_offline_demo"),
     )
 
     # 3. Capacity-aware route selection

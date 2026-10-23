@@ -1,16 +1,16 @@
-"""Google Street View Static API service with metadata pre-flight checks and rate control."""
+"""Google Street View Static API service with metadata pre-flight checks.
+
+Loads all endpoints and API keys from environment configuration (.env).
+Operates strictly online without offline mock data.
+"""
 
 import logging
 from typing import Optional
-from datetime import datetime, timezone
 import httpx
 from backend.app.config import settings
 from backend.app.schemas.route import Coordinate
 
 logger = logging.getLogger(__name__)
-
-STREETVIEW_METADATA_URL = "https://maps.googleapis.com/maps/api/streetview/metadata"
-STREETVIEW_IMAGE_URL = "https://maps.googleapis.com/maps/api/streetview"
 
 
 class StreetViewMetadataResult:
@@ -27,7 +27,10 @@ async def check_street_view_availability(
     """Pre-flight check via Street View Metadata API to verify coverage before requesting images."""
     api_key = settings.GOOGLE_STREET_VIEW_API_KEY
     if not api_key:
+        logger.debug("Street View API key not configured; skipping Street View metadata check.")
         return StreetViewMetadataResult(is_available=False)
+
+    metadata_url = settings.GOOGLE_STREET_VIEW_METADATA_URL or "https://maps.googleapis.com/maps/api/streetview/metadata"
 
     params = {
         "location": f"{coord.lat},{coord.lng}",
@@ -36,8 +39,8 @@ async def check_street_view_availability(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(STREETVIEW_METADATA_URL, params=params)
+        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SECONDS) as client:
+            response = await client.get(metadata_url, params=params)
             if response.status_code == 200:
                 data = response.json()
                 status = data.get("status")
@@ -49,7 +52,7 @@ async def check_street_view_availability(
                     )
             return StreetViewMetadataResult(is_available=False)
     except Exception as exc:
-        logger.warning("Street View metadata check failed: %s", exc)
+        logger.warning("Street View metadata check error: %s", exc)
         return StreetViewMetadataResult(is_available=False)
 
 
@@ -59,16 +62,18 @@ async def fetch_street_view_image_bytes(
     pitch: int = 0,
     fov: int = 90,
 ) -> Optional[bytes]:
-    """Fetches static street view image bytes for eligible road segment."""
+    """Fetches real static street view image bytes for eligible road segment."""
     api_key = settings.GOOGLE_STREET_VIEW_API_KEY
     if not api_key:
         return None
 
-    # First check metadata
+    # Pre-flight check with metadata API
     meta = await check_street_view_availability(coord)
     if not meta.is_available:
         logger.info("No Street View coverage at %s,%s", coord.lat, coord.lng)
         return None
+
+    image_url = settings.GOOGLE_STREET_VIEW_IMAGE_URL or "https://maps.googleapis.com/maps/api/streetview"
 
     params = {
         "size": "600x400",
@@ -81,8 +86,8 @@ async def fetch_street_view_image_bytes(
         params["heading"] = f"{heading:.1f}"
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(STREETVIEW_IMAGE_URL, params=params)
+        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SECONDS) as client:
+            response = await client.get(image_url, params=params)
             if response.status_code == 200 and "image" in response.headers.get("content-type", ""):
                 return response.content
             return None

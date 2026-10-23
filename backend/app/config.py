@@ -7,18 +7,34 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Google Maps Platform keys
+    # Google Maps Platform keys and URLs
     GOOGLE_MAPS_BROWSER_KEY: Optional[str] = Field(
         default=None,
         description="Public browser key restricted to Maps JavaScript API and HTTP referrers."
+    )
+    GOOGLE_MAPS_JS_API_URL: str = Field(
+        default="https://maps.googleapis.com/maps/api/js",
+        description="Google Maps JavaScript API script URL."
     )
     GOOGLE_ROUTES_API_KEY: Optional[str] = Field(
         default=None,
         description="Server-side key for Google Routes API v2."
     )
+    GOOGLE_ROUTES_API_URL: str = Field(
+        default="https://routes.googleapis.com/directions/v2:computeRoutes",
+        description="Google Routes API computeRoutes endpoint URL."
+    )
     GOOGLE_STREET_VIEW_API_KEY: Optional[str] = Field(
         default=None,
         description="Server-side key for Street View Static API."
+    )
+    GOOGLE_STREET_VIEW_METADATA_URL: str = Field(
+        default="https://maps.googleapis.com/maps/api/streetview/metadata",
+        description="Google Street View Metadata API URL."
+    )
+    GOOGLE_STREET_VIEW_IMAGE_URL: str = Field(
+        default="https://maps.googleapis.com/maps/api/streetview",
+        description="Google Street View Static Image API URL."
     )
 
     # Google Gemini AI settings
@@ -30,11 +46,29 @@ class Settings(BaseSettings):
         default="gemini-2.5-flash",
         description="Vision-capable Gemini model name."
     )
+    GEMINI_API_URL: Optional[str] = Field(
+        default=None,
+        description="Optional custom API URL / endpoint for Gemini API."
+    )
 
-    # Persistence
-    DATABASE_URL: str = Field(
-        default="sqlite+aiosqlite:///./flowsplit.db",
-        description="Database connection string (SQLite for dev/tests, PostgreSQL for prod)."
+    # Frontend and Backend Server Network Configuration
+    API_BASE_URL: Optional[str] = Field(
+        default=None,
+        description="Optional API base URL for client HTTP requests."
+    )
+    HOST: str = Field(
+        default="0.0.0.0",
+        description="Backend server host interface."
+    )
+    PORT: int = Field(
+        default=8000,
+        description="Backend server port."
+    )
+
+    # Persistence: No SQLite for now. Optional PostgreSQL for production.
+    DATABASE_URL: Optional[str] = Field(
+        default=None,
+        description="Database connection string (Optional PostgreSQL only; SQLite is disabled)."
     )
     REDIS_URL: Optional[str] = Field(
         default=None,
@@ -47,9 +81,9 @@ class Settings(BaseSettings):
     REQUEST_TIMEOUT_SECONDS: float = Field(default=15.0, ge=3.0, le=60.0)
     MAX_RETRIES: int = Field(default=3, ge=1, le=5)
 
-    # Environment
+    # Operational Mode: Strictly Online Mode
+    ONLINE_MODE_ONLY: bool = Field(default=True, description="Strict online execution only.")
     ENVIRONMENT: str = Field(default="development")
-    DEMO_MODE_DEFAULT: bool = Field(default=False)
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -58,9 +92,21 @@ class Settings(BaseSettings):
     )
 
     @property
-    def is_offline_mode_required(self) -> bool:
-        """Determines if the backend must default to offline demonstration due to missing keys."""
-        return not bool(self.GOOGLE_ROUTES_API_KEY or self.GEMINI_API_KEY)
+    def has_routes_key(self) -> bool:
+        return bool(self.GOOGLE_ROUTES_API_KEY)
+
+    @property
+    def has_street_view_key(self) -> bool:
+        return bool(self.GOOGLE_STREET_VIEW_API_KEY)
+
+    @property
+    def has_gemini_key(self) -> bool:
+        return bool(self.GEMINI_API_KEY)
+
+    @property
+    def is_online_ready(self) -> bool:
+        """Checks if minimum online credentials (Google Routes and Gemini) are configured."""
+        return bool(self.GOOGLE_ROUTES_API_KEY and self.GEMINI_API_KEY)
 
 
 settings = Settings()

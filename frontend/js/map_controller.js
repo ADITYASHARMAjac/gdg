@@ -31,13 +31,13 @@ class MapController {
     this.onRouteSelected = null;
   }
 
-  async init(browserApiKey = null) {
+  async init(browserApiKey = null, mapsJsUrl = "https://maps.googleapis.com/maps/api/js") {
     if (browserApiKey) {
       try {
-        await this.loadGoogleMapsScript(browserApiKey);
+        await this.loadGoogleMapsScript(browserApiKey, mapsJsUrl);
         this.initGoogleMap();
         this.mode = 'google';
-        document.getElementById('hudEngineLabel').textContent = "Google Maps JS API";
+        document.getElementById('hudEngineLabel').textContent = "Google Maps JS API (Live)";
         return;
       } catch (err) {
         console.warn("Failed to load Google Maps JS API, falling back to Canvas engine:", err);
@@ -49,14 +49,15 @@ class MapController {
     document.getElementById('hudEngineLabel').textContent = "Interactive Vector / Canvas";
   }
 
-  loadGoogleMapsScript(apiKey) {
+  loadGoogleMapsScript(apiKey, mapsJsUrl = "https://maps.googleapis.com/maps/api/js") {
     return new Promise((resolve, reject) => {
       if (window.google && window.google.maps) {
         resolve();
         return;
       }
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+      const cleanUrl = mapsJsUrl.includes('?') ? mapsJsUrl : `${mapsJsUrl}?key=${apiKey}&libraries=places`;
+      script.src = cleanUrl;
       script.async = true;
       script.defer = true;
       script.onload = () => resolve();
@@ -181,12 +182,49 @@ class MapController {
     this.routes = routes || [];
     this.selectedRouteId = selectedRouteId || (routes.length ? routes[0].id : null);
 
+    this.updateMapLegendUI();
+
     if (this.mode === 'google') {
       this.renderGoogleRoutes();
     } else {
       this.fitBoundsToRoutes();
       this.renderCanvas();
     }
+  }
+
+  updateMapLegendUI() {
+    const legendEl = document.getElementById('mapLegend');
+    if (!legendEl) return;
+
+    if (!this.routes || this.routes.length === 0) {
+      legendEl.innerHTML = `
+        <div class="legend-header">Candidate Paths</div>
+        <div class="legend-item"><span class="legend-text" style="color: #94a3b8;">Awaiting live route evaluation...</span></div>
+      `;
+      return;
+    }
+
+    let itemsHtml = '<div class="legend-header">Candidate Paths (Online)</div>';
+    this.routes.forEach(r => {
+      const isSelected = r.id === this.selectedRouteId;
+      itemsHtml += `
+        <div class="legend-item ${isSelected ? 'active-legend' : ''}" style="cursor: pointer;" data-route-id="${r.id}">
+          <span class="legend-color-bar" style="background: ${r.route_color || '#3b82f6'};"></span>
+          <span class="legend-text" style="${isSelected ? 'font-weight: 700; color: #fff;' : ''}">${r.name}</span>
+        </div>
+      `;
+    });
+    legendEl.innerHTML = itemsHtml;
+
+    // Allow clicking legend to switch selected route
+    legendEl.querySelectorAll('.legend-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const routeId = item.getAttribute('data-route-id');
+        if (routeId && this.onRouteSelected) {
+          this.onRouteSelected(routeId);
+        }
+      });
+    });
   }
 
   setSelectedRoute(routeId) {

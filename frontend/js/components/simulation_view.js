@@ -1,6 +1,7 @@
 /**
  * Simulation View Component
  * Controls the interactive Traffic Simulation Lab modal comparing Baseline vs FlowSplit.
+ * Operates across online-retrieved candidate routes.
  */
 
 const SimulationViewComponent = {
@@ -55,7 +56,10 @@ const SimulationViewComponent = {
 
   async runSimulation(trips = 900) {
     try {
-      const data = await ApiClient.runSimulation(trips);
+      const candidates = (window.flowsplitApp && window.flowsplitApp.candidates && window.flowsplitApp.candidates.length)
+        ? window.flowsplitApp.candidates
+        : null;
+      const data = await ApiClient.runSimulation(trips, candidates);
       this.renderSimulationResults(data);
     } catch (err) {
       console.error("Failed to run traffic simulation:", err);
@@ -90,22 +94,26 @@ const SimulationViewComponent = {
       (data.candidates || []).forEach(cand => {
         const baseAlloc = base.route_allocations[cand.id] || 0;
         const flowAlloc = flow.route_allocations[cand.id] || 0;
-        const isShortcut = cand.id.includes('shortcut');
+        const segCap = (cand.segments && cand.segments.length)
+          ? Math.round(cand.segments[0].nominal_capacity_vph)
+          : (cand.id.includes('shortcut') ? 250 : 1200);
+
+        const isOverloaded = baseAlloc > segCap;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong>${cand.name}</strong></td>
-          <td>${isShortcut ? '250 veh/hr' : (cand.id.includes('arterial') ? '1,800 veh/hr' : '850 veh/hr')}</td>
-          <td><span class="badge ${cand.suitability_score >= 75 ? 'badge-success' : 'badge-danger'}">${Math.round(cand.suitability_score)}/100</span></td>
-          <td style="color: ${baseAlloc > 400 && isShortcut ? '#f87171' : 'inherit'}; font-weight: 700;">
+          <td>${segCap.toLocaleString()} veh/hr</td>
+          <td><span class="badge ${cand.suitability_score >= 70 ? 'badge-success' : 'badge-danger'}">${Math.round(cand.suitability_score || 50)}/100</span></td>
+          <td style="color: ${isOverloaded ? '#f87171' : 'inherit'}; font-weight: 700;">
             ${baseAlloc} trips (${Math.round((baseAlloc / data.total_hourly_demand_vehicles) * 100)}%)
           </td>
           <td style="color: #34d399; font-weight: 700;">
             ${flowAlloc} trips (${Math.round((flowAlloc / data.total_hourly_demand_vehicles) * 100)}%)
           </td>
           <td>
-            <span class="badge ${isShortcut && baseAlloc > 250 ? 'badge-danger' : 'badge-success'}">
-              ${isShortcut && baseAlloc > 250 ? 'GRIDLOCK IN BASELINE' : 'CAPACITY PROTECTED'}
+            <span class="badge ${isOverloaded ? 'badge-danger' : 'badge-success'}">
+              ${isOverloaded ? 'GRIDLOCK IN BASELINE' : 'CAPACITY PROTECTED'}
             </span>
           </td>
         `;
@@ -118,10 +126,10 @@ const SimulationViewComponent = {
     if (verdictEl) {
       verdictEl.textContent = (
         `Simulation Results for ${data.total_hourly_demand_vehicles} Commuter Trips: ` +
-        `Baseline navigation directed ${base.route_allocations['route-shortcut-elm-alley'] || 'most'} drivers onto the narrow residential shortcut ` +
-        `causing severe spillover gridlock and an average delay of ${baseTimeMin} minutes. ` +
-        `FlowSplit's capacity-aware algorithm prevented all overloaded segments, lowering maximum queue length by ${data.queue_reduction_percent.toFixed(0)}% ` +
-        `and reducing transit time down to ${flowTimeMin} minutes.`
+        `Baseline GPS concentrated uncoordinated drivers onto single shortest corridors, creating ` +
+        `${base.overloaded_segments_count} bottlenecked segments and an average transit time of ${baseTimeMin} minutes. ` +
+        `FlowSplit's capacity-aware optimization protected corridor limits, lowering maximum queue length by ` +
+        `${data.queue_reduction_percent.toFixed(0)}% and improving transit time to ${flowTimeMin} minutes.`
       );
     }
   },

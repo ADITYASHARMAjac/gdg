@@ -12,14 +12,14 @@ class CandidatesRequest(BaseModel):
     origin_address: Optional[str] = None
     destination_address: Optional[str] = None
     vehicle_type: VehicleType = VehicleType.PASSENGER_CAR
-    demo_mode: bool = False
+    demo_mode: bool = False  # Deprecated: offline mode is disabled; system runs strictly online
 
 
 class CandidatesResponse(BaseModel):
     candidates: list[CandidateRoute]
     origin: Coordinate
     destination: Coordinate
-    provider: str  # "google_routes_api" or "deterministic_offline_demo"
+    provider: str = "google_routes_api"
     is_demo: bool = False
     message: Optional[str] = None
     warnings: list[str] = Field(default_factory=list)
@@ -30,7 +30,7 @@ class AnalyzeRoutesRequest(BaseModel):
     vehicle_type: VehicleType = VehicleType.PASSENGER_CAR
     sample_interval_meters: float = 100.0
     use_cache: bool = True
-    demo_mode: bool = False
+    demo_mode: bool = False  # Deprecated: offline mode is disabled
 
 
 class AnalyzeRoutesResponse(BaseModel):
@@ -78,10 +78,14 @@ class RoadAnalysisResponse(BaseModel):
 
 class PublicConfigResponse(BaseModel):
     google_maps_browser_key: Optional[str] = None
+    google_maps_js_api_url: str = "https://maps.googleapis.com/maps/api/js"
+    google_routes_api_url: str = "https://routes.googleapis.com/directions/v2:computeRoutes"
+    api_base_url: Optional[str] = None
     has_routes_backend_key: bool = False
     has_street_view_backend_key: bool = False
     has_gemini_backend_key: bool = False
     gemini_model: str = "gemini-2.5-flash"
+    online_mode_only: bool = True
     demo_mode_active: bool = False
     environment: str = "development"
     api_version: str = "1.0.0"

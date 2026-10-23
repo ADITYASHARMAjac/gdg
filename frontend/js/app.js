@@ -1,6 +1,7 @@
 /**
  * FlowSplit Main Application Controller
- * Orchestrates map rendering, route evaluation pipeline, user geolocation, and UI states.
+ * Orchestrates online map rendering, real-time route evaluation, user geolocation, and UI states.
+ * Operates strictly in online mode with all endpoints and credentials loaded from .env.
  */
 
 class FlowSplitApp {
@@ -9,46 +10,76 @@ class FlowSplitApp {
     this.candidates = [];
     this.selectedRouteId = null;
     this.currentDecision = null;
-    this.demoMode = false;
     this.config = null;
   }
 
   async init() {
-    console.log("Initializing FlowSplit Application...");
+    console.log("Initializing FlowSplit Online Application...");
+    window.flowsplitApp = this;
 
     // 1. Fetch public backend configuration
     this.config = await ApiClient.getPublicConfig();
-    this.demoMode = this.config.demo_mode_active || false;
     this.updateConfigStatusUI();
 
     // 2. Initialize Map Engine
-    await this.mapController.init(this.config.google_maps_browser_key);
+    await this.mapController.init(
+      this.config.google_maps_browser_key,
+      this.config.google_maps_js_api_url
+    );
     this.mapController.onRouteSelected = (routeId) => this.handleRouteSelected(routeId);
 
     // 3. Initialize UI Subcomponents
     SimulationViewComponent.init();
     this.setupEventListeners();
 
-    // 4. Run initial benchmark evaluation
-    await this.evaluateCurrentRoute(true);
+    // 4. Initial evaluation or prompt user for input
+    if (this.config.has_routes_backend_key) {
+      await this.evaluateCurrentRoute(true);
+    } else {
+      this.showMissingCredentialsPrompt();
+    }
   }
 
   updateConfigStatusUI() {
     const statusText = document.getElementById('statusText');
     const statusDot = document.getElementById('statusDot');
     const demoBanner = document.getElementById('demoBannerTag');
-    const demoBtnText = document.getElementById('demoModeBtnText');
+    if (demoBanner) demoBanner.style.display = 'none';
 
-    if (this.demoMode) {
-      statusText.textContent = "Offline Benchmark Mode";
+    if (!this.config.has_routes_backend_key || !this.config.has_gemini_backend_key) {
+      statusText.textContent = "Online Mode (API Keys Required in .env)";
       statusDot.className = "status-dot";
-      demoBanner.style.display = "inline-block";
-      demoBtnText.textContent = "Switch to Live APIs";
+      statusDot.style.background = "#eab308"; // Amber indicator
     } else {
-      statusText.textContent = "Google & Gemini Live APIs";
+      statusText.textContent = "Live Online Mode (Google & Gemini APIs)";
       statusDot.className = "status-dot live";
-      demoBanner.style.display = "none";
-      demoBtnText.textContent = "Switch to Offline Demo";
+      statusDot.style.background = "#10b981"; // Emerald green
+    }
+  }
+
+  showMissingCredentialsPrompt() {
+    const container = document.getElementById('candidateRoutesContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding: 24px; text-align: left;">
+          <h3 style="color: #f59e0b; margin-bottom: 8px;">🔑 API Credentials Required (.env)</h3>
+          <p style="color: #cbd5e1; font-size: 0.9rem; line-height: 1.5; margin-bottom: 12px;">
+            FlowSplit runs strictly in <strong>online mode</strong> without offline demo fallback or synthetic data.
+          </p>
+          <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.5;">
+            To perform live routing and AI road inspection, configure your credentials in the root <code>.env</code> file:
+          </p>
+          <ul style="color: #94a3b8; font-size: 0.82rem; margin: 8px 0 16px 20px; line-height: 1.6;">
+            <li><code>GOOGLE_ROUTES_API_KEY</code></li>
+            <li><code>GOOGLE_STREET_VIEW_API_KEY</code></li>
+            <li><code>GEMINI_API_KEY</code></li>
+            <li><code>GOOGLE_MAPS_BROWSER_KEY</code> (optional for Google Maps JS)</li>
+          </ul>
+          <p style="color: #cbd5e1; font-size: 0.85rem;">
+            Once supplied, enter origin and destination coordinates above and click <strong>Evaluate Routes</strong>.
+          </p>
+        </div>
+      `;
     }
   }
 
@@ -70,7 +101,7 @@ class FlowSplitApp {
       });
     }
 
-    // Preset Scenario buttons
+    // Quick coordinates presets
     document.querySelectorAll('.preset-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
@@ -84,16 +115,6 @@ class FlowSplitApp {
         await this.evaluateCurrentRoute(false);
       });
     });
-
-    // Toggle Demo Mode Button
-    const btnToggleDemo = document.getElementById('btnToggleDemoMode');
-    if (btnToggleDemo) {
-      btnToggleDemo.addEventListener('click', async () => {
-        this.demoMode = !this.demoMode;
-        this.updateConfigStatusUI();
-        await this.evaluateCurrentRoute(false);
-      });
-    }
 
     // Confirm Route Button
     const btnConfirm = document.getElementById('btnConfirmRoute');
@@ -119,11 +140,11 @@ class FlowSplitApp {
 
   async handleUseGeolocation() {
     const feedback = document.getElementById('geolocationFeedback');
-    feedback.textContent = "Requesting location permission...";
+    feedback.textContent = "Requesting device coordinates...";
 
     try {
       const pos = await GeolocationService.getCurrentPosition();
-      const coordStr = `${pos.lat}, ${pos.lng}`;
+      const coordStr = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`;
       document.getElementById('originInput').value = coordStr;
       feedback.textContent = `Location acquired (±${Math.round(pos.accuracy)}m)`;
       this.mapController.setUserLocation(pos.lat, pos.lng);
@@ -157,33 +178,27 @@ class FlowSplitApp {
     const spinner = document.getElementById('routeSearchSpinner');
     const btnText = document.getElementById('routeSearchBtnText');
     if (spinner) spinner.style.display = 'inline-block';
-    if (btnText) btnText.textContent = "Analyzing Imagery & Capacity...";
+    if (btnText) btnText.textContent = "Connecting to Google & Gemini APIs...";
 
     try {
-      // 1. Fetch Candidate Routes
+      // 1. Fetch Live Candidate Routes via Google Routes API
       const candidatesRes = await ApiClient.getCandidateRoutes(
         origin,
         destination,
-        vehicleType,
-        this.demoMode
+        vehicleType
       );
       this.candidates = candidatesRes.candidates || [];
 
       // Update provenance notice
       const provNotice = document.getElementById('provenanceText');
       if (provNotice) {
-        if (candidatesRes.is_demo) {
-          provNotice.textContent = "Deterministic offline benchmark active. Evaluates traffic-aware time, road imagery suitability, and residential choke-points.";
-        } else {
-          provNotice.textContent = "Live Google Routes & Gemini multimodal vision inspection active. Assessing road widths, curbside friction, and safety context.";
-        }
+        provNotice.textContent = "Live Google Routes & Gemini multimodal vision inspection active. Assessing real-time physical road conditions.";
       }
 
       // 2. Visual inspection & suitability scoring
       const analysisRes = await ApiClient.analyzeRoutes(
         this.candidates,
-        vehicleType,
-        this.demoMode
+        vehicleType
       );
       this.candidates = analysisRes.analyzed_candidates;
 
@@ -191,8 +206,7 @@ class FlowSplitApp {
       this.currentDecision = await ApiClient.selectBestRoute(
         this.candidates,
         null,
-        vehicleType,
-        this.demoMode
+        vehicleType
       );
 
       this.selectedRouteId = this.currentDecision.selected_route_id;
@@ -216,7 +230,11 @@ class FlowSplitApp {
 
     } catch (err) {
       console.error("Evaluation failed:", err);
-      alert(`Routing evaluation failed: ${err.message}`);
+      if (!isInitial) {
+        alert(`Online routing request failed: ${err.message}`);
+      } else {
+        this.showMissingCredentialsPrompt();
+      }
     } finally {
       if (spinner) spinner.style.display = 'none';
       if (btnText) btnText.textContent = "Evaluate Routes";
@@ -237,12 +255,12 @@ class FlowSplitApp {
     // Update selected route card and deep-dive
     const route = this.candidates.find(r => r.id === routeId);
     if (route && this.currentDecision) {
-      const mockDecision = {
+      const decision = {
         ...this.currentDecision,
         selected_route_id: routeId,
         selected_route: route,
       };
-      RouteComparisonComponent.updateSelectedDecisionCard(mockDecision);
+      RouteComparisonComponent.updateSelectedDecisionCard(decision);
       RoadDetailsComponent.renderSegmentInspection(route);
     }
   }

@@ -65,7 +65,7 @@ Tracks recently recommended routes to prevent oscillating suggestions and preven
 - **Backend:**
   - Python 3.12+ with FastAPI.
   - Pydantic v2 validation and Pydantic-Settings.
-  - SQLAlchemy 2.0 with AsyncIO (SQLite out-of-the-box, PostgreSQL ready).
+  - Zero-database in-memory persistence (SQLite disabled, PostgreSQL production-ready).
   - Redis integration supported for distributed caching (optional).
 - **AI & Geospatial:**
   - Official `google-genai` Python SDK (`gemini-2.5-flash`).
@@ -95,16 +95,25 @@ Copy the template configuration:
 cp .env.example .env
 ```
 
-Edit `.env` if you have Google Cloud or Gemini API credentials:
+Edit `.env` to supply your online Google Cloud and Gemini credentials:
 ```ini
 GOOGLE_MAPS_BROWSER_KEY=your_browser_key_here
+GOOGLE_MAPS_JS_API_URL=https://maps.googleapis.com/maps/api/js
+
 GOOGLE_ROUTES_API_KEY=your_routes_api_server_key_here
+GOOGLE_ROUTES_API_URL=https://routes.googleapis.com/directions/v2:computeRoutes
+
 GOOGLE_STREET_VIEW_API_KEY=your_street_view_api_server_key_here
+GOOGLE_STREET_VIEW_METADATA_URL=https://maps.googleapis.com/maps/api/streetview/metadata
+GOOGLE_STREET_VIEW_IMAGE_URL=https://maps.googleapis.com/maps/api/streetview
+
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-2.5-flash
-DATABASE_URL=sqlite+aiosqlite:///./flowsplit.db
+GEMINI_API_URL=https://generativelanguage.googleapis.com
+
+ONLINE_MODE_ONLY=true
 ```
-> **Zero-Config Guarantee**: If no API keys are provided in `.env`, FlowSplit automatically boots into **Deterministic Offline Demonstration Mode**.
+> **Online-Only Architecture**: The application operates exclusively in online mode using live APIs. Offline demo fallback, predefined synthetic routes, and SQLite have been completely removed.
 
 ### Step 3: Run the Application
 ```bash
@@ -115,20 +124,19 @@ Open **`http://localhost:8000`** in your browser.
 
 ---
 
-## 5. Offline Demonstration Mode
+## 5. Live Online Routing & Simulation Lab
 
-FlowSplit includes a complete offline benchmark that requires no external Google API keys or billing:
-- **Corridor 1: Grand Parkway Arterial** — 4 lanes, 14m width, 1,800 veh/hr capacity. High suitability (92/100).
-- **Corridor 2: Elm & Pine Residential Shortcut** — 1.5 effective lanes, 4.2m width, 250 veh/hr capacity, school zone. Low suitability (34/100). Nominally 40 seconds shorter in free-flow.
-- **Corridor 3: Central Boulevard Collector** — 2 lanes, 8.5m width, 850 veh/hr capacity. Medium suitability (74/100).
+FlowSplit dynamically evaluates real routes queried from Google Routes API:
+1. Enter your origin and destination coordinates (or click **GPS** to acquire your device location).
+2. Click **"Evaluate Routes"** to query live routes from Google Routes API.
+3. FlowSplit samples road segments, fetches real Street View imagery, and sends imagery to Gemini multimodal vision for physical road suitability scoring.
+4. The capacity-aware engine selects the optimal route balancing transit time against fragile neighborhood corridors.
 
 ### Launching the Traffic Simulation Lab:
 1. In the top navigation bar, click **"Simulation Lab"**.
 2. Specify the hourly commuter trip demand (e.g. 900 vehicles).
 3. Click **"Run Simulation"**.
-4. Observe the results:
-   - **Baseline Shortest-Time Navigation:** Directs 72% of commuters onto the Elm residential shortcut, generating an extreme volume-to-capacity ratio ($V/C = 2.6$), a 165-vehicle queue, and a 24.8-minute average delay.
-   - **FlowSplit Capacity-Aware:** Restricts the residential shortcut, routing primary flow through the Arterial and Collector. **Reduces overloaded segments from 2 to 0, cuts peak queues by 100%, and drops average transit time down to 7.8 minutes.**
+4. Observe the capacity distribution across the live evaluated corridor paths.
 
 ---
 
