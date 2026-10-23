@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowSplit — Capacity-Aware, AI-Powered Routing Dashboard</title>
+  <meta name="description"
+    content="Intelligent traffic routing system mitigating GPS-induced residential side-street gridlock through road imagery analysis and capacity-aware optimization.">
+
+  <!-- Modern Typography from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+
+  <!-- Application Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body class="dark-theme">
+  <!-- Top Navigation Header -->
+  <header class="app-header" id="appHeader">
+    <div class="brand-container">
+      <div class="brand-logo-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="6" cy="19" r="3" />
+          <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" />
+          <circle cx="18" cy="5" r="3" />
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1 class="brand-title">FlowSplit</h1>
+        <span class="brand-subtitle">Capacity-Aware Routing Engine</span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="api-status-pill" id="apiStatusBadge">
+        <span class="status-dot live" id="statusDot"></span>
+        <span class="status-text" id="statusText">Checking Configuration...</span>
+      </div>
+      <div class="demo-tag" id="demoBannerTag">DEMO BENCHMARK</div>
+    </div>
+
+    <div class="header-actions">
+      <div class="vehicle-select-wrapper">
+        <label for="vehicleTypeSelect" class="sr-only">Vehicle Type</label>
+        <select id="vehicleTypeSelect" class="select-input" title="Choose Vehicle Profile">
+          <option value="passenger_car" selected>🚗 Passenger Car</option>
+          <option value="delivery_van">🚐 Delivery Van</option>
+          <option value="emergency_vehicle">🚑 Emergency Vehicle</option>
+          <option value="heavy_truck">🚛 Heavy Truck</option>
+        </select>
+      </div>
+      <button id="btnOpenSimulation" class="btn btn-secondary btn-icon" title="View 900-Trip Traffic Simulation">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 3v18h18" />
+          <path d="m19 9-5 5-4-4-3 3" />
+        </svg>
+        <span>Simulation Lab</span>
+      </button>
+      <button id="btnToggleDemoMode" class="btn btn-outline"
+        title="Switch between Live Google APIs and Deterministic Benchmark">
+        <span id="demoModeBtnText">Offline Demo</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Dashboard -->
+  <main class="dashboard-layout" id="dashboardLayout">
+    <!-- Left Sidebar: Controls & Analysis -->
+    <aside class="sidebar-panel" id="sidebarPanel">
+
+      <!-- Routing Input Form Card -->
+      <section class="card route-input-card">
+        <div class="card-header">
+          <h2 class="card-title">Route Search</h2>
+          <span class="card-badge" id="searchModeBadge">Capacity-Aware</span>
+        </div>
+
+        <form id="routeSearchForm" class="search-form">
+          <!-- Origin Input -->
+          <div class="input-group">
+            <label for="originInput" class="input-label">
+              <span class="coord-dot origin"></span>
+              <span>Origin</span>
+            </label>
+            <div class="input-with-action">
+              <input type="text" id="originInput" class="text-input" placeholder="Suburban Entry (37.7749, -122.4494)"
+                value="37.7749, -122.4494" required>
+              <button type="button" id="btnUseLocation" class="btn-inline-action"
+                title="Use Current Device Location (navigator.geolocation)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                </svg>
+                <span>GPS</span>
+              </button>
+            </div>
+            <div class="field-feedback" id="geolocationFeedback"></div>
+          </div>
+
+          <!-- Destination Input -->
+          <div class="input-group">
+            <label for="destinationInput" class="input-label">
+              <span class="coord-dot destination"></span>
+              <span>Destination</span>
+            </label>
+            <input type="text" id="destinationInput" class="text-input" placeholder="Downtown Core (37.7915, -122.3999)"
+              value="37.7915, -122.3999" required>
+          </div>
+
+          <!-- Quick Scenario Presets -->
+          <div class="preset-links">
+            <span class="preset-label">Scenarios:</span>
+            <button type="button" class="preset-btn active" data-origin="37.7749, -122.4494"
+              data-dest="37.7915, -122.3999">
+              Residential Shortcut Gridlock
+            </button>
+            <button type="button" class="preset-btn" data-origin="37.7650, -122.4600" data-dest="37.7980, -122.4050">
+              Corridor Spillover Test
+            </button>
+          </div>
+
+          <!-- Submit Action -->
+          <button type="submit" id="btnCalculateRoutes" class="btn btn-primary btn-block">
+            <span class="btn-spinner" id="routeSearchSpinner" style="display: none;"></span>
+            <span id="routeSearchBtnText">Evaluate Routes</span>
+          </button>
+        </form>
+
+        <!-- Provenance and Disclaimers -->
+        <div class="provenance-banner" id="provenanceNotice">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+          <span id="provenanceText">Deterministic offline benchmark active. Evaluates traffic-aware time, road imagery
+            suitability, and residential choke-points.</span>
+        </div>
+      </section>
+
+      <!-- Candidate Routes Comparison List -->
+      <section class="card routes-list-card" id="routesListCard">
+        <div class="card-header">
+          <h2 class="card-title">Candidate Routes</h2>
+          <span class="results-count" id="candidateCountTag">0 routes</span>
+        </div>
+
+        <div id="candidateRoutesContainer" class="candidate-routes-container">
+          <div class="empty-state">
+            <p>Click <strong>Evaluate Routes</strong> above to generate alternative paths and inspect road suitability.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Selected Route Decision Details -->
+      <section class="card selected-route-card" id="selectedRouteCard" style="display: none;">
+        <div class="card-header">
+          <h2 class="card-title">FlowSplit Recommendation</h2>
+          <span class="badge badge-success" id="recommendationStatusBadge">Optimal Flow</span>
+        </div>
+
+        <div class="selected-route-body">
+          <div class="route-header-row">
+            <h3 class="selected-route-name" id="selectedRouteName">—</h3>
+            <div class="selected-route-time" id="selectedRouteTime">—</div>
+          </div>
+          <p class="route-summary-text" id="selectedRouteSummary">—</p>
+
+          <div class="metrics-grid">
+            <div class="metric-box">
+              <span class="metric-label">Suitability</span>
+              <span class="metric-val score" id="selectedSuitabilityScore">—</span>
+              <span class="metric-sub" id="selectedSuitabilityConf">Conf: —</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-label">Distance</span>
+              <span class="metric-val" id="selectedDistanceVal">—</span>
+              <span class="metric-sub" id="selectedFreeFlowVal">Free-flow: —</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-label">Choke Risk</span>
+              <span class="metric-val" id="selectedChokeRisk">—</span>
+              <span class="metric-sub" id="selectedVCRatio">Max V/C: —</span>
+            </div>
+          </div>
+
+          <!-- Rationale explanation -->
+          <div class="rationale-box">
+            <div class="rationale-title">Decision Rationale:</div>
+            <p class="rationale-desc" id="selectedRationaleText">—</p>
+          </div>
+
+          <!-- Explicit 'Use This Route' Action -->
+          <button id="btnConfirmRoute" class="btn btn-success btn-block">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span id="btnConfirmRouteText">Use This Recommended Route</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Road Segment Visual Deep-Dive -->
+      <section class="card road-inspection-card" id="roadInspectionCard" style="display: none;">
+        <div class="card-header">
+          <h2 class="card-title">Gemini Road-Segment Analysis</h2>
+          <span class="badge" id="inspectionBadge">AI Vision</span>
+        </div>
+        <p class="inspection-desc">Sampled physical road geometry, curbside parking friction, and safety context
+          inferred from street-level imagery:</p>
+        <div class="segments-accordion" id="segmentsAccordionContainer">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+
+      <!-- Legal and Technical Limitations Notice -->
+      <div class="system-disclaimer">
+        <p><strong>System Scope:</strong> FlowSplit advises users to mitigate neighborhood bottlenecking. It does not
+          control independent motorists or third-party navigation apps, nor does it guarantee adherence. Does not
+          provide real-time turn-by-turn guidance.</p>
+      </div>
+
+    </aside>
+
+    <!-- Right Panel: Interactive Geospatial Map -->
+    <section class="map-view-panel" id="mapViewPanel">
+      <!-- Main Map Element (Google Maps or Fallback Canvas Engine) -->
+      <div id="flowsplitMap" class="map-canvas-container"></div>
+
+      <!-- Map Floating HUD Header -->
+      <div class="map-hud-top" id="mapHud">
+        <div class="hud-item hud-mode">
+          <span class="hud-label">ENGINE</span>
+          <span class="hud-val" id="hudEngineLabel">Interactive Vector / Canvas</span>
+        </div>
+        <div class="hud-item hud-route">
+          <span class="hud-label">CORRIDOR</span>
+          <span class="hud-val" id="hudRouteLabel">Grand Parkway Arterial</span>
+        </div>
+        <div class="hud-item hud-suitability">
+          <span class="hud-label">SUITABILITY</span>
+          <span class="hud-val score-high" id="hudScoreLabel">92/100</span>
+        </div>
+      </div>
+
+      <!-- Map Floating Route Legend -->
+      <div class="map-legend" id="mapLegend">
+        <div class="legend-header">Candidate Paths</div>
+        <div class="legend-item">
+          <span class="legend-color-bar" style="background: #2563eb;"></span>
+          <span class="legend-text">Grand Parkway (Arterial 4-Lane)</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-color-bar" style="background: #dc2626;"></span>
+          <span class="legend-text">Elm Shortcut (Fragile Residential)</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-color-bar" style="background: #10b981;"></span>
+          <span class="legend-text">Central Blvd (Collector 2-Lane)</span>
+        </div>
+      </div>
+
+      <!-- Map Controls Overlay -->
+      <div class="map-controls">
+        <button id="btnZoomIn" class="map-control-btn" title="Zoom In">+</button>
+        <button id="btnZoomOut" class="map-control-btn" title="Zoom Out">−</button>
+        <button id="btnResetView" class="map-control-btn" title="Reset View">⟲</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal: Traffic Simulation Lab (Baseline vs FlowSplit 900 Trips) -->
+  <div class="modal-backdrop" id="simulationModal" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h2 class="modal-title">FlowSplit Traffic Simulation Lab</h2>
+          <p class="modal-subtitle">Deterministic 900-Trip Benchmark: Traditional GPS vs. FlowSplit Capacity-Aware
+            Optimization</p>
+        </div>
+        <button class="btn-close" id="btnCloseSimulation" title="Close Simulation Modal">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Simulation Control Bar -->
+        <div class="sim-control-bar">
+          <div class="sim-input-row">
+            <label for="simDemandInput">Hourly Commuter Trips:</label>
+            <input type="number" id="simDemandInput" value="900" min="100" max="3000" step="100"
+              class="sim-number-input">
+            <button id="btnRunSimSimulation" class="btn btn-primary">Run Simulation</button>
+          </div>
+          <div class="sim-disclaimer-pill">
+            Simulated using standard Bureau of Public Roads (BPR) volume-delay curves
+          </div>
+        </div>
+
+        <!-- Comparative KPI Cards -->
+        <div class="sim-kpi-grid">
+          <div class="kpi-card highlight">
+            <span class="kpi-label">Average Travel Time</span>
+            <div class="kpi-comparison">
+              <div class="kpi-col baseline">
+                <span class="kpi-col-title">Baseline GPS</span>
+                <span class="kpi-val bad" id="simBaselineAvgTime">24.8 min</span>
+              </div>
+              <div class="kpi-arrow">➔</div>
+              <div class="kpi-col flowsplit">
+                <span class="kpi-col-title">FlowSplit</span>
+                <span class="kpi-val good" id="simFlowSplitAvgTime">7.8 min</span>
+              </div>
+            </div>
+            <span class="kpi-delta" id="simTimeDeltaBadge">−68% Transit Time</span>
+          </div>
+
+          <div class="kpi-card highlight">
+            <span class="kpi-label">Max Residential Queue</span>
+            <div class="kpi-comparison">
+              <div class="kpi-col baseline">
+                <span class="kpi-col-title">Baseline GPS</span>
+                <span class="kpi-val bad" id="simBaselineQueue">165 vehicles</span>
+              </div>
+              <div class="kpi-arrow">➔</div>
+              <div class="kpi-col flowsplit">
+                <span class="kpi-col-title">FlowSplit</span>
+                <span class="kpi-val good" id="simFlowSplitQueue">0 vehicles</span>
+              </div>
+            </div>
+            <span class="kpi-delta" id="simQueueDeltaBadge">−100% Queue</span>
+          </div>
+
+          <div class="kpi-card">
+            <span class="kpi-label">Overloaded Segments</span>
+            <div class="kpi-comparison">
+              <div class="kpi-col baseline">
+                <span class="kpi-val bad" id="simBaselineOverloaded">2 segments</span>
+              </div>
+              <div class="kpi-arrow">➔</div>
+              <div class="kpi-col flowsplit">
+                <span class="kpi-val good" id="simFlowSplitOverloaded">0 segments</span>
+              </div>
+            </div>
+            <span class="kpi-sub">V/C ratio > 1.0</span>
+          </div>
+        </div>
+
+        <!-- Route Allocation Comparison Table -->
+        <div class="sim-table-section">
+          <h3>Traffic Volume Allocation</h3>
+          <table class="sim-data-table">
+            <thead>
+              <tr>
+                <th>Corridor Name</th>
+                <th>Capacity</th>
+                <th>Suitability</th>
+                <th>Baseline Allocation</th>
+                <th>FlowSplit Allocation</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="simAllocationsTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Narrative Analysis -->
+        <div class="sim-verdict-box" id="simVerdictBox">
+          <p id="simVerdictText">Traditional navigation direct 72% of commuters onto the Elm residential shortcut to
+            save 40 initial seconds, causing catastrophic hyper-congestion. FlowSplit balances demand against capacity,
+            preserving free-flowing corridors across the city.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client-Side Scripts -->
+  <script src="js/api_client.js"></script>
+  <script src="js/geolocation.js"></script>
+  <script src="js/map_controller.js"></script>
+  <script src="js/components/route_comparison.js"></script>
+  <script src="js/components/road_details.js"></script>
+  <script src="js/components/simulation_view.js"></script>
+  <script src="js/app.js"></script>
+</body>
+
+</html>
