@@ -83,19 +83,24 @@ class MapController {
 
   initGoogleMap() {
     this.container.innerHTML = '';
-    const darkStyle = [
-      { elementType: "geometry", stylers: [{ color: "#0f172a" }] },
-      { elementType: "labels.text.stroke", stylers: [{ color: "#0f172a" }] },
-      { elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
-      { featureType: "road", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
-      { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#334155" }] },
-      { featureType: "water", elementType: "geometry", stylers: [{ color: "#090d16" }] },
+    const lightTransitStyle = [
+      { elementType: "geometry", stylers: [{ color: "#f8fafc" }] },
+      { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+      { elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
+      { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+      { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e2e8f0" }] },
+      { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#ffedd5" }] },
+      { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#fed7aa" }] },
+      { featureType: "water", elementType: "geometry", stylers: [{ color: "#e0f2fe" }] },
+      { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#0284c7" }] },
+      { featureType: "transit", elementType: "geometry", stylers: [{ color: "#f1f5f9" }] },
+      { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
     ];
 
     this.googleMap = new google.maps.Map(this.container, {
       center: this.center,
       zoom: 13,
-      styles: darkStyle,
+      styles: lightTransitStyle,
       disableDefaultUI: false,
       zoomControl: true,
       mapTypeControl: false,
@@ -293,9 +298,9 @@ class MapController {
       const polyline = new google.maps.Polyline({
         path: coords,
         geodesic: true,
-        strokeColor: route.route_color || (isSelected ? '#38bdf8' : '#64748b'),
-        strokeOpacity: isSelected ? 1.0 : 0.45,
-        strokeWeight: isSelected ? 6 : 3,
+        strokeColor: isSelected ? '#ea580c' : (route.route_color || '#94a3b8'),
+        strokeOpacity: isSelected ? 1.0 : 0.5,
+        strokeWeight: isSelected ? 6 : 4,
         zIndex: isSelected ? 100 : 10,
         map: this.googleMap,
       });
@@ -310,7 +315,7 @@ class MapController {
       this.googlePolylines.push({
         routeId: route.id,
         polyline: polyline,
-        color: route.route_color || '#38bdf8',
+        color: route.route_color || '#94a3b8',
       });
     });
 
@@ -323,11 +328,11 @@ class MapController {
         label: { text: "A", color: "#ffffff", fontWeight: "bold" },
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          scale: 12,
-          fillColor: "#3b82f6",
+          scale: 11,
+          fillColor: "#ea580c",
           fillOpacity: 1,
           strokeColor: "#ffffff",
-          strokeWeight: 2,
+          strokeWeight: 3,
         },
       });
       this.googleMarkers.push(origMarker);
@@ -343,11 +348,11 @@ class MapController {
         label: { text: "B", color: "#ffffff", fontWeight: "bold" },
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          scale: 12,
-          fillColor: "#ef4444",
+          scale: 11,
+          fillColor: "#0f172a",
           fillOpacity: 1,
           strokeColor: "#ffffff",
-          strokeWeight: 2,
+          strokeWeight: 3,
         },
       });
       this.googleMarkers.push(destMarker);
@@ -363,7 +368,7 @@ class MapController {
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
           scale: 8,
-          fillColor: "#38bdf8",
+          fillColor: "#ea580c",
           fillOpacity: 1,
           strokeColor: "#ffffff",
           strokeWeight: 2,
@@ -382,9 +387,9 @@ class MapController {
     this.googlePolylines.forEach(item => {
       const isSelected = item.routeId === routeId;
       item.polyline.setOptions({
-        strokeColor: item.color,
-        strokeOpacity: isSelected ? 1.0 : 0.45,
-        strokeWeight: isSelected ? 6 : 3,
+        strokeColor: isSelected ? '#ea580c' : (item.color || '#94a3b8'),
+        strokeOpacity: isSelected ? 1.0 : 0.5,
+        strokeWeight: isSelected ? 6 : 4,
         zIndex: isSelected ? 100 : 10,
       });
     });
@@ -439,12 +444,12 @@ class MapController {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
 
-    // 1. Dark futuristic geospatial background
-    this.ctx.fillStyle = '#0a0e17';
+    // 1. Clean modern light geospatial canvas background
+    this.ctx.fillStyle = '#f8fafc';
     this.ctx.fillRect(0, 0, width, height);
 
-    // 2. Draw subtle grid lines
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    // 2. Subtle geometric grid lines
+    this.ctx.strokeStyle = '#e2e8f0';
     this.ctx.lineWidth = 1;
     const gridSize = 60;
     for (let x = 0; x < width; x += gridSize) {
@@ -473,30 +478,25 @@ class MapController {
         else this.ctx.lineTo(pix.x, pix.y);
       });
 
-      const color = route.route_color || (isSelected ? '#38bdf8' : '#64748b');
-
       if (isSelected) {
-        // Glow layer
-        this.ctx.strokeStyle = color;
+        // Soft orange halo layer
+        this.ctx.strokeStyle = '#fed7aa';
         this.ctx.lineWidth = 10;
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
-        this.ctx.shadowColor = color;
-        this.ctx.shadowBlur = 15;
         this.ctx.stroke();
-        this.ctx.shadowBlur = 0;
 
-        // Core bright line
-        this.ctx.strokeStyle = '#ffffff';
-        this.ctx.lineWidth = 4;
+        // Primary transit orange line
+        this.ctx.strokeStyle = '#ea580c';
+        this.ctx.lineWidth = 5;
         this.ctx.stroke();
       } else {
-        // Unselected route line
-        this.ctx.strokeStyle = color;
-        this.ctx.lineWidth = 5;
+        // Unselected alternative route line
+        this.ctx.strokeStyle = '#94a3b8';
+        this.ctx.lineWidth = 4;
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
-        this.ctx.globalAlpha = 0.55;
+        this.ctx.globalAlpha = 0.65;
         this.ctx.stroke();
         this.ctx.globalAlpha = 1.0;
       }
@@ -508,7 +508,7 @@ class MapController {
         if (seg.suitability && seg.suitability.suitability_score < 40) {
           const pt = this.latLngToPixel(seg.start_coord.lat, seg.start_coord.lng);
           // Warning indicator circle
-          this.ctx.fillStyle = '#ef4444';
+          this.ctx.fillStyle = '#dc2626';
           this.ctx.beginPath();
           this.ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
           this.ctx.fill();
@@ -522,22 +522,22 @@ class MapController {
     // 5. Draw Origin and Destination Pins
     if (this.origin) {
       const origPix = this.latLngToPixel(this.origin.lat, this.origin.lng);
-      this.drawPin(origPix.x, origPix.y, '#3b82f6', 'ORIGIN');
+      this.drawPin(origPix.x, origPix.y, '#ea580c', 'START');
     }
     if (this.destination) {
       const destPix = this.latLngToPixel(this.destination.lat, this.destination.lng);
-      this.drawPin(destPix.x, destPix.y, '#ef4444', 'DEST');
+      this.drawPin(destPix.x, destPix.y, '#0f172a', 'END');
     }
 
     // 6. Draw User Location if available
     if (this.userLocation) {
       const userPix = this.latLngToPixel(this.userLocation.lat, this.userLocation.lng);
-      this.ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+      this.ctx.fillStyle = 'rgba(234, 88, 12, 0.2)';
       this.ctx.beginPath();
-      this.ctx.arc(userPix.x, userPix.y, 16, 0, Math.PI * 2);
+      this.ctx.arc(userPix.x, userPix.y, 14, 0, Math.PI * 2);
       this.ctx.fill();
 
-      this.ctx.fillStyle = '#38bdf8';
+      this.ctx.fillStyle = '#ea580c';
       this.ctx.beginPath();
       this.ctx.arc(userPix.x, userPix.y, 6, 0, Math.PI * 2);
       this.ctx.fill();

@@ -18,13 +18,12 @@
   <!-- Application Stylesheet -->
   <link rel="stylesheet" href="css/style.css">
 </head>
-
-<body class="dark-theme">
+<body class="light-transit-theme">
   <!-- Top Navigation Header -->
   <header class="app-header" id="appHeader">
     <div class="brand-container">
       <div class="brand-logo-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
           stroke-linecap="round" stroke-linejoin="round">
           <circle cx="6" cy="19" r="3" />
           <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" />
@@ -33,20 +32,21 @@
       </div>
       <div class="brand-text">
         <h1 class="brand-title">FlowSplit</h1>
-        <span class="brand-subtitle">Capacity-Aware Routing Engine</span>
+        <span class="brand-subtitle">Smart Mobility & Corridor Routing</span>
       </div>
     </div>
 
     <div class="header-center">
       <div class="api-status-pill" id="apiStatusBadge">
         <span class="status-dot live" id="statusDot"></span>
-        <span class="status-text" id="statusText">Checking Configuration...</span>
+        <span class="status-text" id="statusText">Live Google & Gemini APIs Connected</span>
+        <span id="demoBannerTag" style="display: none;"></span>
       </div>
     </div>
 
     <div class="header-actions">
       <div class="vehicle-select-wrapper">
-        <label for="vehicleTypeSelect" class="sr-only">Vehicle Type</label>
+        <label for="vehicleTypeSelect" class="sr-only">Vehicle Profile</label>
         <select id="vehicleTypeSelect" class="select-input" title="Choose Vehicle Profile">
           <option value="passenger_car" selected>🚗 Passenger Car</option>
           <option value="delivery_van">🚐 Delivery Van</option>
@@ -54,8 +54,8 @@
           <option value="heavy_truck">🚛 Heavy Truck</option>
         </select>
       </div>
-      <button id="btnOpenSimulation" class="btn btn-secondary btn-icon" title="View Capacity Simulation">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <button id="btnOpenSimulation" class="btn btn-secondary btn-icon" title="View Capacity Benchmark Simulation">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 3v18h18" />
           <path d="m19 9-5 5-4-4-3 3" />
         </svg>
@@ -69,85 +69,102 @@
     <!-- Left Sidebar: Controls & Analysis -->
     <aside class="sidebar-panel" id="sidebarPanel">
 
-      <!-- Routing Input Form Card -->
+      <!-- Journey Input Form Card -->
       <section class="card route-input-card">
         <div class="card-header">
-          <h2 class="card-title">Route Search</h2>
-          <span class="card-badge" id="searchModeBadge">Capacity-Aware</span>
+          <div>
+            <h2 class="card-title">Plan Journey</h2>
+            <p class="card-caption">Capacity-aware route optimization</p>
+          </div>
+          <span class="card-badge" id="searchModeBadge">Active Protection</span>
         </div>
 
         <form id="routeSearchForm" class="search-form">
-          <!-- Origin Input -->
-          <div class="input-group">
-            <label for="originInput" class="input-label">
-              <span class="coord-dot origin"></span>
-              <span>Origin</span>
-            </label>
-            <div class="input-with-action">
-              <input type="text" id="originInput" class="text-input" placeholder="Suburban Entry (37.7749, -122.4494)"
-                value="37.7749, -122.4494" required>
-              <button type="button" id="btnUseLocation" class="btn-inline-action"
-                title="Use Current Device Location (navigator.geolocation)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="3 11 22 2 13 21 11 13 3 11" />
-                </svg>
-                <span>GPS</span>
-              </button>
+          <!-- Connected Journey Input Box -->
+          <div class="journey-box">
+            <div class="journey-track-indicator">
+              <span class="journey-dot origin" title="Origin"></span>
+              <span class="journey-line"></span>
+              <span class="journey-dot destination" title="Destination"></span>
             </div>
-            <div class="field-feedback" id="geolocationFeedback"></div>
+
+            <div class="journey-inputs-column">
+              <!-- Origin Row -->
+              <div class="journey-field-row">
+                <div class="journey-field-label">FROM</div>
+                <div class="journey-field-input-wrap">
+                  <input type="text" id="originInput" class="journey-input" placeholder="Origin (lat, lng)"
+                    value="37.7749, -122.4494" required autocomplete="off">
+                  <button type="button" id="btnUseLocation" class="btn-location-pill"
+                    title="Acquire device location via GPS">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                    </svg>
+                    <span>GPS</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="journey-divider"></div>
+
+              <!-- Destination Row -->
+              <div class="journey-field-row">
+                <div class="journey-field-label">TO</div>
+                <div class="journey-field-input-wrap">
+                  <input type="text" id="destinationInput" class="journey-input" placeholder="Destination (lat, lng)"
+                    value="37.7915, -122.3999" required autocomplete="off">
+                </div>
+              </div>
+            </div>
           </div>
 
-          <!-- Destination Input -->
-          <div class="input-group">
-            <label for="destinationInput" class="input-label">
-              <span class="coord-dot destination"></span>
-              <span>Destination</span>
-            </label>
-            <input type="text" id="destinationInput" class="text-input" placeholder="Downtown Core (37.7915, -122.3999)"
-              value="37.7915, -122.3999" required>
-          </div>
+          <div class="field-feedback" id="geolocationFeedback"></div>
 
           <!-- Quick Scenario Presets -->
           <div class="preset-links">
-            <span class="preset-label">Scenarios:</span>
+            <span class="preset-label">Corridors:</span>
             <button type="button" class="preset-btn active" data-origin="37.7749, -122.4494"
               data-dest="37.7915, -122.3999">
-              Residential Shortcut Gridlock
+              Residential Shortcut
             </button>
             <button type="button" class="preset-btn" data-origin="37.7650, -122.4600" data-dest="37.7980, -122.4050">
-              Corridor Spillover Test
+              Arterial Spillover
             </button>
           </div>
 
           <!-- Submit Action -->
           <button type="submit" id="btnCalculateRoutes" class="btn btn-primary btn-block">
             <span class="btn-spinner" id="routeSearchSpinner" style="display: none;"></span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="btnSearchIcon">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
             <span id="routeSearchBtnText">Evaluate Routes</span>
           </button>
         </form>
 
-        <!-- Provenance and Disclaimers -->
-        <div class="provenance-banner" id="provenanceNotice">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="search-status-bar" id="provenanceNotice">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="16" x2="12" y2="12" />
-            <line x1="12" y1="8" x2="12.01" y2="8" />
+            <path d="M12 16v-4" />
+            <path d="M12 8h.01" />
           </svg>
-          <span id="provenanceText">Live Online Mode active. Evaluates real-time traffic-aware paths via Google Routes API and visual suitability via Gemini multimodal inspection.</span>
+          <span id="provenanceText">Real-time Google Routes API & Gemini Vision inspection active.</span>
         </div>
       </section>
 
       <!-- Candidate Routes Comparison List -->
       <section class="card routes-list-card" id="routesListCard">
         <div class="card-header">
-          <h2 class="card-title">Candidate Routes</h2>
+          <div>
+            <h2 class="card-title">Alternative Corridors</h2>
+            <p class="card-caption">Real-time candidate comparisons</p>
+          </div>
           <span class="results-count" id="candidateCountTag">0 routes</span>
         </div>
 
         <div id="candidateRoutesContainer" class="candidate-routes-container">
           <div class="empty-state">
-            <p>Click <strong>Evaluate Routes</strong> above to generate alternative paths and inspect road suitability.
-            </p>
+            <p>Click <strong>Evaluate Routes</strong> to compute candidate paths and inspect street-level road safety.</p>
           </div>
         </div>
       </section>
@@ -155,8 +172,11 @@
       <!-- Selected Route Decision Details -->
       <section class="card selected-route-card" id="selectedRouteCard" style="display: none;">
         <div class="card-header">
-          <h2 class="card-title">FlowSplit Recommendation</h2>
-          <span class="badge badge-success" id="recommendationStatusBadge">Optimal Flow</span>
+          <div>
+            <h2 class="card-title">Optimal Choice</h2>
+            <p class="card-caption">FlowSplit capacity-safe recommendation</p>
+          </div>
+          <span class="badge badge-orange" id="recommendationStatusBadge">Recommended</span>
         </div>
 
         <div class="selected-route-body">
@@ -178,7 +198,7 @@
               <span class="metric-sub" id="selectedFreeFlowVal">Free-flow: —</span>
             </div>
             <div class="metric-box">
-              <span class="metric-label">Choke Risk</span>
+              <span class="metric-label">Bottleneck</span>
               <span class="metric-val" id="selectedChokeRisk">—</span>
               <span class="metric-sub" id="selectedVCRatio">Max V/C: —</span>
             </div>
@@ -186,13 +206,13 @@
 
           <!-- Rationale explanation -->
           <div class="rationale-box">
-            <div class="rationale-title">Decision Rationale:</div>
+            <div class="rationale-title">Engine Rationale:</div>
             <p class="rationale-desc" id="selectedRationaleText">—</p>
           </div>
 
           <!-- Explicit 'Use This Route' Action -->
-          <button id="btnConfirmRoute" class="btn btn-success btn-block">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <button id="btnConfirmRoute" class="btn btn-primary btn-block">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="20 6 9 17 4 12" />
             </svg>
             <span id="btnConfirmRouteText">Use This Recommended Route</span>
@@ -203,22 +223,17 @@
       <!-- Road Segment Visual Deep-Dive -->
       <section class="card road-inspection-card" id="roadInspectionCard" style="display: none;">
         <div class="card-header">
-          <h2 class="card-title">Gemini Road-Segment Analysis</h2>
-          <span class="badge" id="inspectionBadge">AI Vision</span>
+          <div>
+            <h2 class="card-title">Road Conditions & Safety</h2>
+            <p class="card-caption">Multimodal visual road geometry</p>
+          </div>
+          <span class="badge badge-neutral" id="inspectionBadge">AI Verified</span>
         </div>
-        <p class="inspection-desc">Sampled physical road geometry, curbside parking friction, and safety context
-          inferred from street-level imagery:</p>
+        <p class="inspection-desc">Physical carriageway width, curbside parking, and safety context inferred from street-level imagery:</p>
         <div class="segments-accordion" id="segmentsAccordionContainer">
           <!-- Populated dynamically -->
         </div>
       </section>
-
-      <!-- Legal and Technical Limitations Notice -->
-      <div class="system-disclaimer">
-        <p><strong>System Scope:</strong> FlowSplit advises users to mitigate neighborhood bottlenecking. It does not
-          control independent motorists or third-party navigation apps, nor does it guarantee adherence. Does not
-          provide real-time turn-by-turn guidance.</p>
-      </div>
 
     </aside>
 
@@ -227,27 +242,22 @@
       <!-- Main Map Element (Google Maps or Fallback Canvas Engine) -->
       <div id="flowsplitMap" class="map-canvas-container"></div>
 
-      <!-- Map Floating HUD Header -->
-      <div class="map-hud-top" id="mapHud">
-        <div class="hud-item hud-mode">
-          <span class="hud-label">ENGINE</span>
-          <span class="hud-val" id="hudEngineLabel">Interactive Vector / Canvas</span>
+      <!-- Floating Minimalist Map Status Pill -->
+      <div class="map-floating-status" id="mapHud">
+        <div class="floating-pill-content">
+          <span class="floating-pill-dot"></span>
+          <span class="floating-pill-title" id="hudRouteLabel">Awaiting Search</span>
+          <span class="floating-pill-separator">•</span>
+          <span class="floating-pill-score" id="hudScoreLabel">—</span>
         </div>
-        <div class="hud-item hud-route">
-          <span class="hud-label">CORRIDOR</span>
-          <span class="hud-val" id="hudRouteLabel">Awaiting Route Search</span>
-        </div>
-        <div class="hud-item hud-suitability">
-          <span class="hud-label">SUITABILITY</span>
-          <span class="hud-val" id="hudScoreLabel">—</span>
-        </div>
+        <span id="hudEngineLabel" style="display: none;">Google Maps JS</span>
       </div>
 
       <!-- Map Floating Route Legend (Dynamically populated from online API) -->
       <div class="map-legend" id="mapLegend">
-        <div class="legend-header">Candidate Paths (Online)</div>
+        <div class="legend-header">Candidate Paths</div>
         <div class="legend-item">
-          <span class="legend-text" style="color: #94a3b8;">Awaiting live route evaluation...</span>
+          <span class="legend-text" style="color: #64748b;">Awaiting live route evaluation...</span>
         </div>
       </div>
 
