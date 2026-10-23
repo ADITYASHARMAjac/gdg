@@ -87,7 +87,7 @@ async def analyze_candidate_routes_pipeline(
     imagery_successes = 0
     provenance = f"gemini_{settings.GEMINI_MODEL}"
 
-    semaphore = asyncio.Semaphore(5)
+    semaphore = asyncio.Semaphore(2)
     tasks = []
     route_segment_counts = []
 

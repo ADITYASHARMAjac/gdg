@@ -189,18 +189,33 @@ class FlowSplitApp {
       );
       this.candidates = candidatesRes.candidates || [];
 
+      // Render candidates on map & UI immediately
+      this.selectedRouteId = this.candidates[0]?.id || null;
+      this.mapController.setRoutes(this.candidates, this.selectedRouteId);
+      RouteComparisonComponent.renderCandidateList(
+        this.candidates,
+        this.selectedRouteId,
+        (id) => this.handleRouteSelected(id)
+      );
+
       // Update provenance notice
       const provNotice = document.getElementById('provenanceText');
       if (provNotice) {
-        provNotice.textContent = "Live Google Routes & Gemini multimodal vision inspection active. Assessing real-time physical road conditions.";
+        provNotice.textContent = "Live Google Routes acquired. Running multimodal Gemini Vision inspection on physical road segments...";
       }
 
-      // 2. Visual inspection & suitability scoring
+      if (btnText) btnText.textContent = "Inspecting Road Imagery with Gemini AI...";
+
+      // 2. Visual inspection & suitability scoring via Street View + Gemini Vision
       const analysisRes = await ApiClient.analyzeRoutes(
         this.candidates,
         vehicleType
       );
       this.candidates = analysisRes.analyzed_candidates;
+
+      if (provNotice) {
+        provNotice.textContent = `Live inspection active (${analysisRes.analysis_provenance}). ${analysisRes.total_segments_analyzed} road segments evaluated.`;
+      }
 
       // 3. FlowSplit Capacity-Aware Route Selection
       this.currentDecision = await ApiClient.selectBestRoute(
@@ -211,7 +226,7 @@ class FlowSplitApp {
 
       this.selectedRouteId = this.currentDecision.selected_route_id;
 
-      // 4. Update UI Components
+      // 4. Update UI Components with complete AI findings
       RouteComparisonComponent.renderCandidateList(
         this.candidates,
         this.selectedRouteId,
@@ -225,15 +240,21 @@ class FlowSplitApp {
         RoadDetailsComponent.renderSegmentInspection(selectedRoute);
       }
 
-      // 5. Update Map
+      // 5. Update Map with analyzed segments and hazard badges
       this.mapController.setRoutes(this.candidates, this.selectedRouteId);
 
     } catch (err) {
       console.error("Evaluation failed:", err);
-      if (!isInitial) {
-        alert(`Online routing request failed: ${err.message}`);
-      } else {
-        this.showMissingCredentialsPrompt();
+      const container = document.getElementById('candidateRoutesContainer');
+      if (container && (!this.candidates || this.candidates.length === 0)) {
+        container.innerHTML = `
+          <div class="empty-state" style="padding: 16px;">
+            <p style="color: #f87171; font-weight: 600;">Routing Evaluation Error</p>
+            <p style="color: #cbd5e1; font-size: 0.85rem; margin-top: 6px;">${err.message}</p>
+          </div>
+        `;
+      } else if (!isInitial) {
+        alert(`Online routing request error: ${err.message}`);
       }
     } finally {
       if (spinner) spinner.style.display = 'none';

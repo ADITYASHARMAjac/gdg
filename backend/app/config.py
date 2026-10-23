@@ -75,8 +75,8 @@ class Settings(BaseSettings):
     )
 
     # Routing & Vision Parameters
-    SAMPLE_INTERVAL_METERS: float = Field(default=100.0, ge=25.0, le=500.0)
-    MAX_IMAGE_BUDGET_PER_ROUTE: int = Field(default=4, ge=1, le=30)
+    SAMPLE_INTERVAL_METERS: float = Field(default=300.0, ge=25.0, le=1000.0)
+    MAX_IMAGE_BUDGET_PER_ROUTE: int = Field(default=2, ge=1, le=30)
     REQUEST_TIMEOUT_SECONDS: float = Field(default=25.0, ge=3.0, le=60.0)
     MAX_RETRIES: int = Field(default=3, ge=1, le=5)
 

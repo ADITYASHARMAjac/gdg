@@ -47,6 +47,8 @@ async def analyze_road_imagery_with_gemini(
         logger.debug("No image bytes supplied for road segment '%s'", road_name)
         return None, "no_imagery_available"
 
+    import asyncio
+
     try:
         from google import genai
         from google.genai import types
@@ -58,24 +60,38 @@ async def analyze_road_imagery_with_gemini(
         client = genai.Client(**client_kwargs)
         image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
 
-        response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=[image_part, GEMINI_ANALYSIS_PROMPT],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=VisionRoadAnalysis,
-                temperature=0.2,
-            ),
-        )
+        max_attempts = 2
+        delay = 2.0
+        for attempt in range(max_attempts):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=settings.GEMINI_MODEL,
+                    contents=[image_part, GEMINI_ANALYSIS_PROMPT],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=VisionRoadAnalysis,
+                        temperature=0.2,
+                    ),
+                )
 
-        if response.text:
-            analysis = VisionRoadAnalysis.model_validate_json(response.text)
-            return analysis, f"gemini_{settings.GEMINI_MODEL}"
-        else:
-            logger.warning("Gemini API returned an empty response body for road '%s'.", road_name)
-            return None, "empty_gemini_response"
+                if response.text:
+                    analysis = VisionRoadAnalysis.model_validate_json(response.text)
+                    return analysis, f"gemini_{settings.GEMINI_MODEL}"
+                else:
+                    logger.warning("Gemini API returned an empty response body for road '%s'.", road_name)
+                    return None, "empty_gemini_response"
 
-    except Exception as exc:
-        logger.warning("Gemini Vision API invocation failed for road '%s': %s", road_name, exc)
-        return None, f"gemini_error: {str(exc)[:100]}"
+            except Exception as exc:
+                err_str = str(exc)
+                if "429" in err_str and attempt < max_attempts - 1:
+                    logger.info("Gemini 429 rate limit reached, retrying in %.1fs...", delay)
+                    await asyncio.sleep(delay)
+                    delay *= 2
+                    continue
+                logger.warning("Gemini Vision API invocation failed for road '%s': %s", road_name, exc)
+                return None, f"gemini_error: {err_str[:100]}"
+
+    except Exception as outer_exc:
+        logger.warning("Gemini client initialization error: %s", outer_exc)
+        return None, f"gemini_init_error: {str(outer_exc)[:100]}"
 

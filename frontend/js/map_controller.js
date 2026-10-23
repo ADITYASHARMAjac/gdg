@@ -32,12 +32,26 @@ class MapController {
   }
 
   async init(browserApiKey = null, mapsJsUrl = "https://maps.googleapis.com/maps/api/js") {
+    // Graceful fallback if Google Maps JS fails authentication on localhost / domain
+    window.gm_authFailure = () => {
+      console.warn("Google Maps JS API authentication failed. Switching to interactive Canvas Vector engine.");
+      const hud = document.getElementById('hudEngineLabel');
+      if (hud) hud.textContent = "Interactive Vector / Canvas (Active)";
+      this.mode = 'canvas';
+      this.initCanvasMap();
+      if (this.routes && this.routes.length) {
+        this.fitBoundsToRoutes();
+        this.renderCanvas();
+      }
+    };
+
     if (browserApiKey) {
       try {
         await this.loadGoogleMapsScript(browserApiKey, mapsJsUrl);
         this.initGoogleMap();
         this.mode = 'google';
-        document.getElementById('hudEngineLabel').textContent = "Google Maps JS API (Live)";
+        const hud = document.getElementById('hudEngineLabel');
+        if (hud) hud.textContent = "Google Maps JS API (Live)";
         return;
       } catch (err) {
         console.warn("Failed to load Google Maps JS API, falling back to Canvas engine:", err);
@@ -46,7 +60,8 @@ class MapController {
 
     this.initCanvasMap();
     this.mode = 'canvas';
-    document.getElementById('hudEngineLabel').textContent = "Interactive Vector / Canvas";
+    const hud = document.getElementById('hudEngineLabel');
+    if (hud) hud.textContent = "Interactive Vector / Canvas";
   }
 
   loadGoogleMapsScript(apiKey, mapsJsUrl = "https://maps.googleapis.com/maps/api/js") {
@@ -148,11 +163,12 @@ class MapController {
   }
 
   resizeCanvas() {
-    if (!this.canvas) return;
+    if (!this.canvas || !this.ctx) return;
     const rect = this.container.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
   }
 
@@ -184,12 +200,20 @@ class MapController {
 
     this.updateMapLegendUI();
 
-    if (this.mode === 'google') {
-      this.renderGoogleRoutes();
-    } else {
-      this.fitBoundsToRoutes();
-      this.renderCanvas();
+    if (this.mode === 'google' && this.googleMap && window.google && window.google.maps) {
+      try {
+        this.renderGoogleRoutes();
+        return;
+      } catch (err) {
+        console.warn("renderGoogleRoutes error, rendering canvas fallback:", err);
+      }
     }
+
+    if (!this.canvas) {
+      this.initCanvasMap();
+    }
+    this.fitBoundsToRoutes();
+    this.renderCanvas();
   }
 
   updateMapLegendUI() {
@@ -234,6 +258,136 @@ class MapController {
     } else {
       this.renderCanvas();
     }
+  }
+
+  clearGoogleOverlays() {
+    if (this.googlePolylines) {
+      this.googlePolylines.forEach(item => {
+        if (item.polyline) item.polyline.setMap(null);
+      });
+      this.googlePolylines = [];
+    }
+    if (this.googleMarkers) {
+      this.googleMarkers.forEach(marker => {
+        if (marker) marker.setMap(null);
+      });
+      this.googleMarkers = [];
+    }
+  }
+
+  renderGoogleRoutes() {
+    if (!this.googleMap || !window.google || !google.maps) return;
+    this.clearGoogleOverlays();
+
+    if (!this.routes || this.routes.length === 0) return;
+
+    const bounds = new google.maps.LatLngBounds();
+
+    this.routes.forEach(route => {
+      const isSelected = route.id === this.selectedRouteId;
+      const coords = (route.coordinates || []).map(c => ({ lat: c.lat, lng: c.lng }));
+      if (coords.length === 0) return;
+
+      coords.forEach(pt => bounds.extend(pt));
+
+      const polyline = new google.maps.Polyline({
+        path: coords,
+        geodesic: true,
+        strokeColor: route.route_color || (isSelected ? '#38bdf8' : '#64748b'),
+        strokeOpacity: isSelected ? 1.0 : 0.45,
+        strokeWeight: isSelected ? 6 : 3,
+        zIndex: isSelected ? 100 : 10,
+        map: this.googleMap,
+      });
+
+      polyline.addListener('click', () => {
+        this.setSelectedRoute(route.id);
+        if (this.onRouteSelected) {
+          this.onRouteSelected(route.id);
+        }
+      });
+
+      this.googlePolylines.push({
+        routeId: route.id,
+        polyline: polyline,
+        color: route.route_color || '#38bdf8',
+      });
+    });
+
+    // Origin marker (Pin A)
+    if (this.origin) {
+      const origMarker = new google.maps.Marker({
+        position: this.origin,
+        map: this.googleMap,
+        title: "Origin",
+        label: { text: "A", color: "#ffffff", fontWeight: "bold" },
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: "#3b82f6",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        },
+      });
+      this.googleMarkers.push(origMarker);
+      bounds.extend(this.origin);
+    }
+
+    // Destination marker (Pin B)
+    if (this.destination) {
+      const destMarker = new google.maps.Marker({
+        position: this.destination,
+        map: this.googleMap,
+        title: "Destination",
+        label: { text: "B", color: "#ffffff", fontWeight: "bold" },
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: "#ef4444",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        },
+      });
+      this.googleMarkers.push(destMarker);
+      bounds.extend(this.destination);
+    }
+
+    // User location marker if present
+    if (this.userLocation) {
+      const userMarker = new google.maps.Marker({
+        position: this.userLocation,
+        map: this.googleMap,
+        title: "Your Location",
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: "#38bdf8",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        },
+      });
+      this.googleMarkers.push(userMarker);
+    }
+
+    if (!bounds.isEmpty()) {
+      this.googleMap.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+    }
+  }
+
+  highlightGoogleRoute(routeId) {
+    if (!this.googlePolylines) return;
+    this.googlePolylines.forEach(item => {
+      const isSelected = item.routeId === routeId;
+      item.polyline.setOptions({
+        strokeColor: item.color,
+        strokeOpacity: isSelected ? 1.0 : 0.45,
+        strokeWeight: isSelected ? 6 : 3,
+        zIndex: isSelected ? 100 : 10,
+      });
+    });
   }
 
   setUserLocation(lat, lng) {
