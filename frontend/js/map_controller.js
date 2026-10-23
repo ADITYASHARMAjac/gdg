@@ -48,7 +48,7 @@ class MapController {
     if (browserApiKey) {
       try {
         await this.loadGoogleMapsScript(browserApiKey, mapsJsUrl);
-        this.initGoogleMap();
+        await this.initGoogleMap();
         this.mode = 'google';
         const hud = document.getElementById('hudEngineLabel');
         if (hud) hud.textContent = "Google Maps JS API (Live)";
@@ -66,10 +66,42 @@ class MapController {
 
   loadGoogleMapsScript(apiKey, mapsJsUrl = "https://maps.googleapis.com/maps/api/js") {
     return new Promise((resolve, reject) => {
-      if (window.google && window.google.maps) {
+      // If Map is already a constructor, resolve immediately
+      if (window.google && window.google.maps && typeof window.google.maps.Map === 'function') {
         resolve();
         return;
       }
+
+      const callbackName = '__flowsplitMapsLoaded';
+      let timeoutId = null;
+
+      window[callbackName] = async () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        try {
+          if (window.google && window.google.maps && typeof window.google.maps.importLibrary === 'function') {
+            await Promise.allSettled([
+              google.maps.importLibrary("maps"),
+              google.maps.importLibrary("marker"),
+              google.maps.importLibrary("places")
+            ]);
+          }
+        } catch (e) {
+          console.warn("importLibrary notice during callback:", e);
+        } finally {
+          try { delete window[callbackName]; } catch (_) {}
+          resolve();
+        }
+      };
+
+      // Fallback timeout in case of network or key failure
+      timeoutId = setTimeout(() => {
+        if (window.google && window.google.maps && typeof window.google.maps.Map === 'function') {
+          resolve();
+        } else {
+          reject(new Error("Google Maps script load timed out"));
+        }
+      }, 10000);
+
       const script = document.createElement('script');
       let cleanUrl = mapsJsUrl;
       if (!cleanUrl.includes('key=')) {
@@ -81,17 +113,44 @@ class MapController {
       if (!cleanUrl.includes('loading=')) {
         cleanUrl += `&loading=async`;
       }
+      if (!cleanUrl.includes('callback=')) {
+        cleanUrl += `&callback=${callbackName}`;
+      }
       script.src = cleanUrl;
       script.async = true;
       script.defer = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Google Maps script load error"));
+      script.onerror = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        reject(new Error("Google Maps script load error"));
+      };
       document.head.appendChild(script);
     });
   }
 
-  initGoogleMap() {
+  async initGoogleMap() {
     this.container.innerHTML = '';
+
+    let MapConstructor = window.google?.maps?.Map;
+    if (window.google?.maps && typeof window.google.maps.importLibrary === 'function') {
+      try {
+        const mapsLib = await google.maps.importLibrary("maps");
+        if (mapsLib && mapsLib.Map) {
+          MapConstructor = mapsLib.Map;
+        }
+        await google.maps.importLibrary("marker");
+      } catch (err) {
+        console.warn("Notice importing Google Maps libraries in initGoogleMap:", err);
+      }
+    }
+
+    if (!MapConstructor && window.google?.maps?.Map) {
+      MapConstructor = window.google.maps.Map;
+    }
+
+    if (typeof MapConstructor !== 'function') {
+      throw new TypeError("google.maps.Map is not a constructor");
+    }
+
     const lightTransitStyle = [
       { elementType: "geometry", stylers: [{ color: "#f8fafc" }] },
       { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
@@ -106,7 +165,7 @@ class MapController {
       { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
     ];
 
-    this.googleMap = new google.maps.Map(this.container, {
+    this.googleMap = new MapConstructor(this.container, {
       center: this.center,
       zoom: 13,
       mapId: 'flowsplit_transit_map',
