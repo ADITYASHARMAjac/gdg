@@ -146,7 +146,19 @@ class FlowSplitApp {
       const pos = await GeolocationService.getCurrentPosition();
       const coordStr = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`;
       document.getElementById('originInput').value = coordStr;
-      feedback.textContent = `Location acquired (±${Math.round(pos.accuracy)}m)`;
+
+      // If destination is in another region/continent (e.g. San Francisco default), set local destination in user's region
+      const currentDestStr = document.getElementById('destinationInput').value;
+      const currentDest = this.parseCoordinate(currentDestStr, null);
+      if (!currentDest || Math.hypot(currentDest.lat - pos.lat, currentDest.lng - pos.lng) > 0.8) {
+        const localDestLat = (pos.lat + 0.026).toFixed(6);
+        const localDestLng = (pos.lng + 0.026).toFixed(6);
+        document.getElementById('destinationInput').value = `${localDestLat}, ${localDestLng}`;
+        feedback.textContent = `Location acquired (±${Math.round(pos.accuracy)}m) • Set local destination in your area`;
+      } else {
+        feedback.textContent = `Location acquired (±${Math.round(pos.accuracy)}m)`;
+      }
+
       this.mapController.setUserLocation(pos.lat, pos.lng);
     } catch (err) {
       console.warn("Geolocation failed:", err);
@@ -244,17 +256,22 @@ class FlowSplitApp {
       this.mapController.setRoutes(this.candidates, this.selectedRouteId);
 
     } catch (err) {
-      console.error("Evaluation failed:", err);
+      console.warn("Evaluation notice:", err);
       const container = document.getElementById('candidateRoutesContainer');
+      const isZeroPaths = err.message && err.message.toLowerCase().includes("zero paths");
+      const helpfulMsg = isZeroPaths
+        ? "No drivable road route found between these coordinates (e.g. separated by oceans or across continents). Please select points reachable by road in the same region, or click one of the preset corridor buttons above."
+        : err.message;
+
       if (container && (!this.candidates || this.candidates.length === 0)) {
         container.innerHTML = `
-          <div class="empty-state" style="padding: 16px;">
-            <p style="color: #f87171; font-weight: 600;">Routing Evaluation Error</p>
-            <p style="color: #cbd5e1; font-size: 0.85rem; margin-top: 6px;">${err.message}</p>
+          <div class="empty-state" style="padding: 16px; text-align: left;">
+            <p style="color: #ea580c; font-weight: 700; margin-bottom: 6px;">⚠️ Route Computation Notice</p>
+            <p style="color: #475569; font-size: 0.82rem; line-height: 1.45;">${helpfulMsg}</p>
           </div>
         `;
       } else if (!isInitial) {
-        alert(`Online routing request error: ${err.message}`);
+        alert(helpfulMsg);
       }
     } finally {
       if (spinner) spinner.style.display = 'none';

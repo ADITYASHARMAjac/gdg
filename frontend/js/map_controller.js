@@ -71,7 +71,16 @@ class MapController {
         return;
       }
       const script = document.createElement('script');
-      const cleanUrl = mapsJsUrl.includes('?') ? mapsJsUrl : `${mapsJsUrl}?key=${apiKey}&libraries=places`;
+      let cleanUrl = mapsJsUrl;
+      if (!cleanUrl.includes('key=')) {
+        cleanUrl += `${cleanUrl.includes('?') ? '&' : '?'}key=${apiKey}`;
+      }
+      if (!cleanUrl.includes('libraries=')) {
+        cleanUrl += `&libraries=places,marker`;
+      }
+      if (!cleanUrl.includes('loading=')) {
+        cleanUrl += `&loading=async`;
+      }
       script.src = cleanUrl;
       script.async = true;
       script.defer = true;
@@ -100,10 +109,59 @@ class MapController {
     this.googleMap = new google.maps.Map(this.container, {
       center: this.center,
       zoom: 13,
+      mapId: 'flowsplit_transit_map',
       styles: lightTransitStyle,
       disableDefaultUI: false,
       zoomControl: true,
       mapTypeControl: false,
+    });
+  }
+
+  createMarker(options) {
+    const { position, title, label, color = '#ea580c', scale = 11 } = options;
+    const labelText = typeof label === 'object' ? label.text : (label || '');
+
+    if (google.maps.marker && google.maps.marker.AdvancedMarkerElement) {
+      const pinDiv = document.createElement('div');
+      pinDiv.className = 'custom-map-pin';
+      pinDiv.style.width = `${scale * 2}px`;
+      pinDiv.style.height = `${scale * 2}px`;
+      pinDiv.style.borderRadius = '50%';
+      pinDiv.style.backgroundColor = color;
+      pinDiv.style.border = '2.5px solid #ffffff';
+      pinDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+      pinDiv.style.display = 'flex';
+      pinDiv.style.alignItems = 'center';
+      pinDiv.style.justifyContent = 'center';
+      pinDiv.style.color = '#ffffff';
+      pinDiv.style.fontWeight = 'bold';
+      pinDiv.style.fontSize = `${Math.max(9, Math.round(scale * 0.9))}px`;
+      pinDiv.style.fontFamily = 'Outfit, sans-serif';
+      if (labelText) {
+        pinDiv.textContent = labelText;
+      }
+
+      return new google.maps.marker.AdvancedMarkerElement({
+        map: this.googleMap,
+        position: position,
+        title: title || '',
+        content: pinDiv,
+      });
+    }
+
+    return new google.maps.Marker({
+      position: position,
+      map: this.googleMap,
+      title: title || '',
+      label: labelText ? { text: labelText, color: '#ffffff', fontWeight: 'bold' } : undefined,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: scale,
+        fillColor: color,
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWeight: 2.5,
+      },
     });
   }
 
@@ -274,7 +332,13 @@ class MapController {
     }
     if (this.googleMarkers) {
       this.googleMarkers.forEach(marker => {
-        if (marker) marker.setMap(null);
+        if (marker) {
+          if (typeof marker.setMap === 'function') {
+            marker.setMap(null);
+          } else {
+            marker.map = null;
+          }
+        }
       });
       this.googleMarkers = [];
     }
@@ -321,19 +385,12 @@ class MapController {
 
     // Origin marker (Pin A)
     if (this.origin) {
-      const origMarker = new google.maps.Marker({
+      const origMarker = this.createMarker({
         position: this.origin,
-        map: this.googleMap,
         title: "Origin",
-        label: { text: "A", color: "#ffffff", fontWeight: "bold" },
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 11,
-          fillColor: "#ea580c",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 3,
-        },
+        label: "A",
+        color: "#ea580c",
+        scale: 11,
       });
       this.googleMarkers.push(origMarker);
       bounds.extend(this.origin);
@@ -341,19 +398,12 @@ class MapController {
 
     // Destination marker (Pin B)
     if (this.destination) {
-      const destMarker = new google.maps.Marker({
+      const destMarker = this.createMarker({
         position: this.destination,
-        map: this.googleMap,
         title: "Destination",
-        label: { text: "B", color: "#ffffff", fontWeight: "bold" },
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 11,
-          fillColor: "#0f172a",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 3,
-        },
+        label: "B",
+        color: "#0f172a",
+        scale: 11,
       });
       this.googleMarkers.push(destMarker);
       bounds.extend(this.destination);
@@ -361,18 +411,11 @@ class MapController {
 
     // User location marker if present
     if (this.userLocation) {
-      const userMarker = new google.maps.Marker({
+      const userMarker = this.createMarker({
         position: this.userLocation,
-        map: this.googleMap,
         title: "Your Location",
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: "#ea580c",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-        },
+        color: "#ea580c",
+        scale: 8,
       });
       this.googleMarkers.push(userMarker);
     }
@@ -400,19 +443,13 @@ class MapController {
     this.origin = { lat, lng };
     this.center = { lat, lng };
     if (this.mode === 'google' && this.googleMap) {
-      new google.maps.Marker({
+      const userMarker = this.createMarker({
         position: { lat, lng },
-        map: this.googleMap,
         title: "Your Location",
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 8,
-          fillColor: "#38bdf8",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-        },
+        color: "#ea580c",
+        scale: 8,
       });
+      this.googleMarkers.push(userMarker);
       this.googleMap.setCenter({ lat, lng });
     } else {
       this.renderCanvas();
