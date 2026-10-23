@@ -14,6 +14,7 @@ from backend.app.schemas.route import (
     CandidateRoute,
     Coordinate,
     SelectedRouteDecision,
+    RoadSegmentData,
 )
 from backend.app.services.google_routes import get_candidate_routes
 from backend.app.services.street_view import fetch_street_view_image_bytes
